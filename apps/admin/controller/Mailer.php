@@ -1,16 +1,16 @@
 <?php
 // 邮箱控制器
 // +----------------------------------------------------------------------
-// | PHP version 5.4+                
+// | Copyright (c) 2016-2018 https://www.eacoophp.com, All rights reserved.         
 // +----------------------------------------------------------------------
-// | Copyright (c) 2016-2017 http://www.eacoo123.com, All rights reserved.
+// | [EacooPHP] 并不是自由软件,可免费使用,未经许可不能去掉EacooPHP相关版权。
+// | 禁止在EacooPHP整体或任何部分基础上发展任何派生、修改或第三方版本用于重新分发
 // +----------------------------------------------------------------------
 // | Author:  心云间、凝听 <981248356@qq.com>
 // +----------------------------------------------------------------------
 namespace app\admin\controller;
 
-use app\common\model\Config;
-use app\admin\builder\Builder;
+use app\common\model\Config as ConfigModel;
 
 class Mailer extends Admin{
 
@@ -20,7 +20,7 @@ class Mailer extends Admin{
     function _initialize()
     {
         parent::_initialize();
-        $this->configModel = new Config();
+        $this->configModel = new ConfigModel();
         $this->tabList = [
             'register_active' =>['title'=>'注册激活模板','href'=>url('template',['template_type'=>'register_active'])],
             'captcha_active'  =>['title'=>'邮箱验证码模板','href'=>url('template',['template_type'=>'captcha_active'])]
@@ -34,7 +34,7 @@ class Mailer extends Admin{
     public function template($template_type='register_active'){
         if (IS_POST) {
             // 提交数据
-            $template_data         = input('post.');
+            $template_data         = $this->request->param();
             $content_data['value'] = htmlspecialchars_decode($template_data['template_content']);//模板内容单独存放
             unset($template_data['template_content']);//去除模板内容，模板内容单独放
             $data['value']         = json_encode($template_data);
@@ -100,16 +100,19 @@ class Mailer extends Admin{
             
             $info['template_content'] = $template_content;
 
-            Builder::run('Form')
-                    ->setMetaTitle('邮箱模板')  // 设置页面标题
+            $return = builder('Form')
             		->setTabNav($this->tabList, $template_type)  // 设置Tab按钮列表
                     ->addFormItem('active', 'radio', '邮箱激活', '',[1=>'开启',0=>'关闭'])
                     ->addFormItem('subject', 'text', '邮件主题', '')
                     //->addFormItem('template_content', 'ueditor', '邮箱激活模板', '请用http://#link#代替激活链接，#username#代替用户名',array('width'=>'100%','height'=>'260px','config'=>''))
-                    ->addFormItem('template_content', 'wangeditor', '邮箱激活模板', '请用http://#link#代替激活链接，#username#代替用户名',['width'=>'100%','height'=>'260px','config'=>'simple'])
+                    ->addFormItem('template_content', 'wangeditor', '邮箱激活模板', '请用http://#link#代替激活链接，#username#代替用户名',['picturesModal'=>false,'menus'=>"'head','bold','italic','foreColor','link','emoticon','code','undo','redo'"])
                     ->setFormData($info)
                     ->addButton('submit')->addButton('back')    // 设置表单按钮
                     ->fetch();
+
+            return Iframe()
+                    ->setMetaTitle('邮箱模板')  // 设置页面标题
+                    ->content($return);
         }
     }
 

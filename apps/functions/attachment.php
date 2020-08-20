@@ -1,20 +1,132 @@
 <?php 
-use app\common\model\Attachment;
+// 附件
+// +----------------------------------------------------------------------
+// | Copyright (c) 2016-2018 https://www.eacoophp.com, All rights reserved.         
+// +----------------------------------------------------------------------
+// | [EacooPHP] 并不是自由软件,可免费使用,未经许可不能去掉EacooPHP相关版权。
+// | 禁止在EacooPHP整体或任何部分基础上发展任何派生、修改或第三方版本用于重新分发
+// +----------------------------------------------------------------------
+// | Author:  心云间、凝听 <981248356@qq.com>
+// +----------------------------------------------------------------------
 
-/**
- * 创建多级目录
- * @param  [type] $dir 路径
- * @return [type] [description]
- */
-function mkdirs($dir) {
-    if (! is_dir ( $dir )) {
-        if (! mkdirs ( dirname ( $dir ) )) {
-            return false;
+use app\common\logic\Attachment as AttachmentLogic;
+
+if (!function_exists('mkdirs'))
+{
+    /**
+     * 创建多级目录
+     * @param  [type] $dir 路径
+     * @return [type] [description]
+     */
+    function mkdirs($dir) {
+        if (! is_dir ( $dir )) {
+            if (! mkdirs ( dirname ( $dir ) )) {
+                return false;
+            }
+            if (! mkdir ( $dir, 0755 )) {
+                return false;
+            }
         }
-        if (! mkdir ( $dir, 0755 )) {
+        return true;
+    }
+}
+
+if (!function_exists('rmdirs'))
+{
+    /**
+     * 删除文件夹
+     * @param string $dirname 目录
+     * @param bool $withself 是否删除自身
+     * @return boolean
+     */
+    function rmdirs($dirname, $withself = true)
+    {
+        if (!is_dir($dirname))
             return false;
+        $files = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($dirname, RecursiveDirectoryIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST
+        );
+
+        foreach ($files as $fileinfo)
+        {
+            $todo = ($fileinfo->isDir() ? 'rmdir' : 'unlink');
+            $todo($fileinfo->getRealPath());
+        }
+        if ($withself)
+        {
+            @rmdir($dirname);
+        }
+        return true;
+    }
+
+}
+
+if (!function_exists('copydirs'))
+{
+    /**
+     * 复制文件夹
+     * @param string $source 源文件夹
+     * @param string $dest 目标文件夹
+     */
+    function copydirs($source, $dest)
+    {
+        if (!is_dir($dest))
+        {
+            mkdir($dest, 0755);
+        }
+        foreach (
+        $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($source, RecursiveDirectoryIterator::SKIP_DOTS), RecursiveIteratorIterator::SELF_FIRST) as $item
+        )
+        {
+            if ($item->isDir())
+            {
+                $sontDir = $dest . DS . $iterator->getSubPathName();
+                if (!is_dir($sontDir))
+                {
+                    mkdir($sontDir);
+                }
+            }
+            else
+            {
+                copy($item, $dest . DS . $iterator->getSubPathName());
+            }
         }
     }
+
+}
+
+/**
+ * 改变用户组的权限
+ * @param  [type] $path 递归路径
+ * @param  [type] $uid 用户名
+ * @param  [type] $gid 用户组
+ * @param  integer $model [description]
+ * @return [type] [description]
+ * @date   2018-06-03
+ * @author 心云间、凝听 <981248356@qq.com>
+ */
+function recurse_chown_chgrp_chmod($path, $uid, $gid,$model=0755) 
+{ 
+    $d = opendir ($path) ; 
+    chown($path,'www');
+    chgrp($path,'www');
+    chmod($path,$model);
+    while(($file = readdir($d)) !== false) { 
+        if ($file != "." && $file != "..") { 
+
+            $typepath = $path . "/" . $file ; 
+
+            //print $typepath. " : " . filetype ($typepath). "<BR>" ; 
+            if (filetype ($typepath) == 'dir') { 
+                recurse_chown_chgrp_chmod ($typepath, $uid, $gid); 
+            } 
+
+            chown($typepath, $uid); 
+            chgrp($typepath, $gid); 
+            chmod($typepath,$model);
+        } 
+    } 
     return true;
 }
 
@@ -51,7 +163,7 @@ function format_bytes($size, $delimiter = '') {
  * echo format_file_size($thefile);
  */
 function format_file_size($size) { 
-    $sizes = array(" Bytes", " KB", " MB", " GB", " TB", " PB", " EB", " ZB", " YB"); 
+    $sizes = [" Bytes", " KB", " MB", " GB", " TB", " PB", " EB", " ZB", " YB"]; 
     if ($size == 0) {  
         return('n/a');  
     } else { 
@@ -141,61 +253,126 @@ function downloadExcel($strTable,$filename)
     echo '<html><meta http-equiv="Content-Type" content="text/html; charset=utf-8" />'.$strTable.'</html>';
 }
 
-/*******************************Aliyun OSS start ********************************/
-
 /**
- * 实例化阿里云OSS
- * @return object 实例化得到的对象
- * @return 此步作为共用对象，可提供给多个模块统一调用
- */
-function oss_client($config = []) {
-    if(empty($config)) $config = config('aliyun_oss');
-    //实例化OSS
-    $oss = new \OSS\OssClient($config['access_key_id'],$config['access_key_secret'],$config['endpoint']);
-    return $oss;
-}
-
-/**
- * 上传指定的本地文件内容
- * @param  string $object 对象
+ * 文件上传驱动
  * @return [type] [description]
- * @date   2017-08-07
- * @author 赵俊峰 <981248356@qq.com>
+ * @date   2017-11-15
+ * @author 心云间、凝听 <981248356@qq.com>
  */
-function oss_upload($object = '') {
-    $path = ltrim($object,'/');
-    $object = config('aliyun_oss.root_path').$object;
-    //try 要执行的代码,如果代码执行过程中某一条语句发生异常,则程序直接跳转到CATCH块中,由$e收集错误信息和显示
-    try{
-        $bucket = config('aliyun_oss.bucket');
-        $filePath = PUBLIC_PATH.$path;
-        if (file_exists($filePath)) {
-            $ossClient = oss_client();//dump($object);dump($filePath);halt($ossClient);
-            //uploadFile的上传方法
-            
-            $ossClient->uploadFile($bucket, $object, $filePath);
+function upload_drivers()
+{
+    $dirver_list = ['local'=>'本地'];
+    $dirver_hook_id = db('hooks')->where('name','UploadFile')->value('id');
+    if ($dirver_hook_id>0) {
+        $dirvers = db('Hooks_extra')->where('hook_id',$dirver_hook_id)->where('depend_type',2)->column('depend_flag');
+        if (!empty($dirvers)) {
+            foreach ($dirvers as $key => $dirver) {
+                $dirver_list[$dirver] = db('plugins')->where('name',$dirver)->value('title');
+            }
         }
-        
-    } catch(OssException $e) {
-        //如果出错这里返回报错信息
-        return $e->getMessage();
     }
-    //否则，完成上传操作
-    return true;
+    
+    return $dirver_list;
 }
-/*******************************Aliyun OSS end ********************************/
+
+/**
+ * 获取cdn域名
+ * @return [type] [description]
+ * @date   2017-11-16
+ * @author 心云间、凝听 <981248356@qq.com>
+ */
+function get_cdn_domain()
+{
+    $cdn_domain = cache('cdn_domain');
+    if (!$cdn_domain) {
+        $driver = !empty(config('attachment_options.driver')) ? config('attachment_options.driver') :'local';
+        if ($driver!='local') {
+            $check_res = check_install_plugin($driver);
+            if ($check_res) {
+                $class = get_plugin_class($driver);
+                if (class_exists($class)) {
+                    $plugin = new $class();
+                    if(method_exists($plugin,'getDomain')){
+                        $cdn_domain = $plugin->getDomain();
+                        cache('cdn_domain',$cdn_domain,3600);
+                        return $cdn_domain;
+                    }
+                    
+                } 
+            }
+        } 
+        $cdn_domain = request()->domain();
+        cache('cdn_domain',$cdn_domain,3600);
+    }
+    return $cdn_domain;
+    
+}
+/**
+ * 获取cdn域名
+ * @return [type] [description]
+ * @date   2017-11-16
+ * @author 心云间、凝听 <981248356@qq.com>
+ */
+function get_uploadpath_url()
+{
+    $cdn_uploadpath_url = cache('cdn_uploadpath_url');
+    if (!$cdn_uploadpath_url) {
+        $driver = !empty(config('attachment_options.driver')) ? config('attachment_options.driver') :'local';
+        if ($driver!='local') {
+            $check_res = check_install_plugin($driver);
+            if ($check_res) {
+                $class = get_plugin_class($driver);
+                if (class_exists($class)) {
+                    $plugin = new $class();
+                    if(method_exists($plugin,'getUploadPathUrl')){
+                        $cdn_uploadpath_url = $plugin->getUploadPathUrl();
+                        cache('cdn_uploadpath_url',$cdn_uploadpath_url,3600);
+                        return $cdn_uploadpath_url;
+                    }
+                    
+                } 
+            }
+        } 
+        $cdn_uploadpath_url = request()->domain();
+        cache('cdn_uploadpath_url',$cdn_uploadpath_url,3600);
+    }
+    return $cdn_uploadpath_url;
+    
+}
+
+/**
+ * 图片地址转化为CDN
+ * @param  string $path 图片路径
+ * @param  string $style 样式
+ * @return [type]       [description]
+ */
+function cdn_img_url($path = '', $style='')
+{
+    if($path=='' || !$path) return false;
+
+    if (strpos($path, 'http://')!==false || strpos($path, 'https://')!==false) return $path;
+
+    $cdn_path    = get_uploadpath_url().$path;
+    if ($style!='') {
+        $url = $cdn_path.'!'.$style;
+    } else{
+        $url = $cdn_path; 
+    }
+    
+    return $url;
+}
 
 /*******************************images图片相关 start ********************************/
 
 //获取媒体分类对象数量
-function term_media_count($term_id,$path_type='picture'){
+function term_media_count($term_id,$path_type='picture',$map=[]){
     $media_ids = db('term_relationships')->where(['term_id'=>$term_id,'table'=>'attachment'])->select();
     if(count($media_ids)){
         $object_ids       = array_column($media_ids,'object_id');
         $map['id']        = ['in',$object_ids];
         
         $map['path_type'] = ['in',$path_type];//过滤目录
-        $count            = Attachment::where($map)->count();
+        $count            = model('Attachment')->where($map)->count();
     }
     return isset($count) && $count ? $count:0;
 }
@@ -216,30 +393,6 @@ function get_image($id = 0 , $type='') {
 }
 
 /**
- * 图片地址转化为CDN
- * @param  string $path 图片路径
- * @param  string $style 样式
- * @return [type]       [description]
- */
-function cdn_img_url($path = '', $style='')
-{
-    if($path=='' || !$path) return false;
-
-    if (strpos($path, 'http://') || strpos($path, 'https://')) return $path;
-
-    $cdn_domain  = config('aliyun_oss.domain');
-    //$cdn_style = config('aliyun_oss.style');
-    $cdn_path    = $cdn_domain.'/'.config('aliyun_oss.root_path').$path;
-    if ($style!='') {
-        $url = $cdn_path.'!'.$style;
-    } else{
-        $url = $cdn_path; 
-    }
-    
-    return $url;
-}
-
-/**
  * 获取缩略图
  * @param  string $path 图片路径
  * @param  string $style 缩略图样式
@@ -248,22 +401,21 @@ function cdn_img_url($path = '', $style='')
 function get_thumb_image($path = '', $style='small')
 {
     if($path=='' || !$path) return false;
-    if (strpos($path, 'http://') || strpos($path, 'https://')) return $path;
+    if (strpos($path, 'http://')!==false || strpos($path, 'https://')!==false) return $path;
     
-    if (config('aliyun_oss.enable')==1) {
-        //oss
+    $option   = config('attachment_options');//获取附件配置值
+
+    if ($option['driver']!='local' && $option['driver']!='') {
         $url = cdn_img_url($path,$style);
     } else{
-        $option   = config('attachment_options');//获取附件配置值
-        $option   = json_decode($option,true);
+        
         if (isset($option['cut']) && $option['cut']) {
              if (!empty($option[$style.'_size'])) {//缩略图
                 $path = thumb_image($path,$option[$style.'_size']['width'],$option[$style.'_size']['height']);
             }
         }
-
-        $root_url = request()->domain();
-        $url = $root_url.$path;
+       
+        $url = get_uploadpath_url().$path;
     }
 
     return $url;
@@ -276,8 +428,8 @@ function get_thumb_image($path = '', $style='small')
  */
 function get_attachment_info($id) {
     if ((int)$id) {
-        $attachment_info = Attachment::info($id);
-        return $attachment_info;
+        $info = AttachmentLogic::info($id);
+        return $info;
     }
     return false;
 }
@@ -295,21 +447,24 @@ function getThumbImageById($img_id,$thumb_type='small')
     if (empty($info)) {
         return root_full_path(config('view_replace_str.__PUBLIC__').'/img/file-default.png');
     }
-    if ($info['location'] == 'local') {
 
-        return get_thumb_image($info['path'],$thumb_type);
+    return get_thumb_image($info['path'],$thumb_type);
+    
+    // if ($info['location'] == 'local') {
 
-    } else {
-        $new_img = $info['path'];
-        $name = get_plugin_class($info['location']);
-        if (class_exists($name)) {
-            $class = new $name();
-            if (method_exists($class, 'small')) {
-                $new_img = $class->thumb($info['path'],$thumb_type);
-            }
-        }
-        return root_full_path($new_img);
-    }
+    //     return get_thumb_image($info['path'],$thumb_type);
+
+    // } else {
+    //     $new_img = $info['path'];
+    //     $name = get_plugin_class($info['location']);
+    //     if (class_exists($name)) {
+    //         $class = new $name();
+    //         if (method_exists($class, 'small')) {
+    //             $new_img = $class->thumb($info['path'],$thumb_type);
+    //         }
+    //     }
+    //     return root_full_path($new_img);
+    // }
 
 }
 
@@ -319,7 +474,7 @@ function getThumbImageById($img_id,$thumb_type='small')
  * @return mixed
  */
 function getImgSrcByExt($ext,$path='',$is_default=false){
-    if (in_array($ext,['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'pdf', 'wps', 'txt', 'zip', 'rar', 'gz', 'bz2', '7z'])) {
+    /*if (in_array($ext,['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'pdf', 'wps', 'txt', 'zip', 'rar', 'gz', 'bz2', '7z'])) {
         if ($path=''||$is_default==true) {
             $path = config('view_replace_str.__PUBLIC__').'/img/file-default.png';
         }
@@ -327,7 +482,11 @@ function getImgSrcByExt($ext,$path='',$is_default=false){
         if ($path=''||$is_default==true) {
             $path = config('view_replace_str.__PUBLIC__').'/img/file-default.png';
         }
+    }*/
+    if(!in_array($ext,['jpg','jpeg','bmp','png','gif'])){
+        $path = config('view_replace_str.__PUBLIC__').'/img/file-'.$ext.'.png';
     }
+
     return root_full_path($path);
 }
 
@@ -342,7 +501,7 @@ function get_first_pic($html_content)
     $p = "#src=('|\")(.*)('|\")#isU"; //正则表达式
     preg_match_all($p, $img, $img1);
     $img_path = $img1[2][0]; //获取第一张图片路径
-    if (!strpos($img_path,'static/emotions')) {//排除表情
+    if (strpos($img_path,'static/emotions')===false) {//排除表情
         return $img_path;
     }  
 }
@@ -361,7 +520,7 @@ function get_first_img($html_content,$check_str='static/emotions')
         $p = "#src=('|\")(.*)('|\")#isU"; //正则表达式
         preg_match_all($p, $img, $img1);
         $img_path = $img1[2][0]; //获取第一张图片路径
-        if (!strpos($img_path,$check_str)) {//排除表情
+        if (strpos($img_path,$check_str)===false) {//排除表情
                 $imgs[]=$img_path;
             }
     }
@@ -370,6 +529,7 @@ function get_first_img($html_content,$check_str='static/emotions')
         return $imgs[0];
     }  
 }
+
 /**获取图片数量
  * @param $html_content
  * @return mixed
@@ -384,17 +544,6 @@ function pic_total($html_content) {
     return $cnt;
 }
 
-/**
- * root_full_path   渲染链接
- * @param $path
- * @return mixed
- * @author:xjw129xjt(肖骏涛) xjt@ourstu.com
- */
-function render_picture_path($path)
-{
-    $path = root_full_path($path);
-    return is_bool(strpos($path, 'http://')) ? 'http://' . str_replace('//', '/', $_SERVER['HTTP_HOST'] . '/' . $path) : $path;
-}
 /*******************************************************************************/
 /**
  * 图片缩略图

@@ -1,4 +1,13 @@
 <?php 
+// 分类函数
+// +----------------------------------------------------------------------
+// | Copyright (c) 2016-2018 https://www.eacoophp.com, All rights reserved.         
+// +----------------------------------------------------------------------
+// | [EacooPHP] 并不是自由软件,可免费使用,未经许可不能去掉EacooPHP相关版权。
+// | 禁止在EacooPHP整体或任何部分基础上发展任何派生、修改或第三方版本用于重新分发
+// +----------------------------------------------------------------------
+// | Author:  心云间、凝听 <981248356@qq.com>
+// +----------------------------------------------------------------------
 /**
  * 获取不同类型分类
  * @param  array $taxonomies 分类法
@@ -6,7 +15,7 @@
  * @return array 返回结果数组
  * @author 
  */
-function get_terms($taxonomies,$field='*'){
+function get_terms($taxonomies,$field=true){
 
 }
 
@@ -18,9 +27,9 @@ function get_terms($taxonomies,$field='*'){
  * @return array/string
  * @author 心云间、凝听 <981248356@qq.com>
  */
-function get_the_category($object_id){
+function get_the_category($object_id,$table='posts'){
     $map['object_id'] = $object_id;
-    $map['table']     = 'posts';
+    $map['table']     = $table;
 	return db('term_relationships')->where($map)->value('term_id');
 }
 
@@ -32,7 +41,7 @@ function get_the_category($object_id){
  * @return array/string
  * @author 心云间、凝听 <981248356@qq.com>
  */
-function get_term_info($object_id,$field='*',$table='posts'){
+function get_term_info($object_id,$field=true,$table='posts'){
     $rela_map['object_id'] = $object_id;
     $rela_map['table']     = $table;
     $term_id               = db('term_relationships')->where($rela_map)->value('term_id');

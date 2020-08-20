@@ -1,13 +1,14 @@
 <?php
 // +----------------------------------------------------------------------
-// | Copyright (c) 2017 http://www.eacoo123.com All rights reserved.
+// | Copyright (c) 2016-2018 https://www.eacoophp.com, All rights reserved.         
 // +----------------------------------------------------------------------
-// | Licensed ( http://www.apache.org/licenses/LICENSE-2.0 )
+// | [EacooPHP] 并不是自由软件,可免费使用,未经许可不能去掉EacooPHP相关版权。
+// | 禁止在EacooPHP整体或任何部分基础上发展任何派生、修改或第三方版本用于重新分发
 // +----------------------------------------------------------------------
 // | Author:  心云间、凝听 <981248356@qq.com>
 // +----------------------------------------------------------------------
 namespace app\home\controller;
-use app\common\model\User;
+use app\common\model\User as UserModel;
 use think\captcha\Captcha;
 
 class Login extends Home {
@@ -15,7 +16,7 @@ class Login extends Home {
     function _initialize()
     {
         parent::_initialize();
-        $this->user_model = new User();
+        $this->userModel = new UserModel();
     }
     
     /**
@@ -25,7 +26,7 @@ class Login extends Home {
     public function login()
     {
         $this->pageConfig('登录','login','login');
-        if(session('user_login_auth')) $this->redirect(url('home/usercenter/profile'));
+        if(session('user_login_auth')) $this->redirect(url('home/index/index'));
         if (IS_POST) {
            $captcha = new Captcha();
             if(!$captcha->check($this->param['captcha'],1)){
@@ -33,11 +34,11 @@ class Login extends Home {
             }
             $rememberme = input('post.rememberme')==1 ? true : false;
 
-            $uid = $this->user_model->login($this->param['username'],$this->param['password'], $rememberme);
+            $uid = logic('user/User')->login($this->param['username'],$this->param['password'], $rememberme);
             if (!$uid) {
-                $this->error($this->user_model->getError());
+                $this->error($this->userModel->getError());
             } elseif (0 < $uid) {
-                $this->success('登录成功！','home/usercenter/profile');
+                $this->success('登录成功！','home/index/index');
             } else {
                 $this->logout();
             }

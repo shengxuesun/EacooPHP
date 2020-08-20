@@ -1,11 +1,12 @@
 <?php
-// 权限模型       
+// 权限规则模型       
 // +----------------------------------------------------------------------
-// | PHP version 5.4+                
+// | Copyright (c) 2016-2018 https://www.eacoophp.com, All rights reserved.         
 // +----------------------------------------------------------------------
-// | Copyright (c) 2014-2016 http://www.eacoo123.com, All rights reserved.
+// | [EacooPHP] 并不是自由软件,可免费使用,未经许可不能去掉EacooPHP相关版权。
+// | 禁止在EacooPHP整体或任何部分基础上发展任何派生、修改或第三方版本用于重新分发
 // +----------------------------------------------------------------------
-// | Author: 心云间、凝听 <981248356@qq.com>
+// | Author:  心云间、凝听 <981248356@qq.com>
 // +----------------------------------------------------------------------
 namespace app\admin\model;
 
@@ -23,9 +24,17 @@ class AuthRule extends Base
     // protected $type       = [
     //     'birthday' => 'timestamp',
     // ];
+    
+    //获取显示位置
+    protected function getPositionTextAttr($value, $data){
+        $text = ['left'=>'侧边栏','top'=>'头部'];
+        return $text[$data['position']];
+    }
 
-    // 定义时间戳字段名
-    protected $createTime = '';
-    //protected $updateTime = '';
+    //获取父级菜单
+    protected function getParentMenuAttr($value, $data){
+        $parent_menu = $this->where(['id'=>$data['pid']])->value('title');
+        return $parent_menu;
+    }
 
 }

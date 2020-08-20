@@ -1,15 +1,17 @@
 <?php
 // 插件控制器       
 // +----------------------------------------------------------------------
-// | PHP version 5.4+                
+// | Copyright (c) 2017-2019 https://www.eacoophp.com, All rights reserved.         
 // +----------------------------------------------------------------------
-// | Copyright (c) 2014-2016 http://www.eacoo123.com, All rights reserved.
+// | [EacooPHP] 并不是自由软件,可免费使用,未经许可不能去掉EacooPHP相关版权。
+// | 禁止在EacooPHP整体或任何部分基础上发展任何派生、修改或第三方版本用于重新分发
 // +----------------------------------------------------------------------
-// | Author: 心云间、凝听 <981248356@qq.com>
+// | Author:  心云间、凝听 <981248356@qq.com>
 // +----------------------------------------------------------------------
 namespace app\common\controller;
 use app\admin\model\Hooks;
 use app\admin\model\Plugins;
+use app\admin\logic\Extension as ExtensionLogic;
 
 class Plugin extends Base {
 	
@@ -47,16 +49,42 @@ class Plugin extends Base {
      * @return [type]               [description]
      */
 	public function fetch($template='', $vars = [], $replace = [], $config = [] ,$render=false) {
-		if ($template != '') {
-            if (!is_file($template)) {
-                $template = $this->pluginPath. 'view/'. $template . '.' .config('template.view_suffix');
-                if (!is_file($template)) {
-                    throw new \Exception('模板不存在：'.$template, 5001);
-                }
-            }
+		$plugin_name = input('param.plugin_name');
 
-            echo $this->view->fetch($template, $vars, $replace, $config, $render);
+        if ($plugin_name != '') {
+            $plugin = $plugin_name;
+            $action = 'index';
+        } else {
+            $plugin = input('param._plugin',$this->name);
+            $action = input('param._action');
         }
+        $template = $template == '' ? $action : $template;
+        if (MODULE_MARK === 'admin') {
+        	$template = 'admin/'.$template;
+        }
+        if (!is_file($template)) {
+        	if (MODULE_MARK != 'admin') {
+        		// 获取当前主题的名称
+	            $current_theme_path = THEME_PATH.CURRENT_THEME.'/'; //默认主题设为当前主题
+	        	$theme_plugin_path = $current_theme_path.'plugins/'.$plugin.'/'; //当前主题插件文件夹路径
+	        	$theme_template = $theme_plugin_path.$template . '.' .config('template.view_suffix');
+        	} else{
+        		$theme_template = $template;
+        	}
+        	
+        	if (!is_file($theme_template)) {
+        		$template = $this->pluginPath. 'view/'. $template . '.' .config('template.view_suffix');
+	            if (!is_file($template)) {
+	                throw new \Exception('模板不存在：'.$template, 5001);
+	            }
+        	} else{
+        		$template = $theme_template;
+        	}
+            
+            
+        }
+
+        echo $this->view->fetch($template, $vars, $replace, $config, $render);
 	}
 
 	/**
@@ -69,7 +97,11 @@ class Plugin extends Base {
 		$name = input('param._plugin', '', 'trim');
 
 		if ($name) {
-			return Plugins::getInfoByFile($name);
+			
+			$extensionObj = new ExtensionLogic;
+			$extensionObj->initInfo('plugin',$name);
+			$this->pluginPath = $extensionObj->appExtensionPath;
+			return $extensionObj->getInfoByFile();
 		} else {
 			$info_file = $this->pluginPath.'install/info.json';
 			if (is_file($info_file)) {
@@ -121,7 +153,8 @@ class Plugin extends Base {
 		if ($config) {
 			$config = json_decode($config, true);
 		} else {
-			$config = Plugins::getDefaultConfig($name);
+			$extensionObj = new ExtensionLogic;
+			$config = $extensionObj->getDefaultConfig($name);
 		}
 		$_config[$name] = $config;
 		return $config;

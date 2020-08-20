@@ -1,4 +1,13 @@
 <?php
+// 时间处理
+// +----------------------------------------------------------------------
+// | Copyright (c) 2016-2018 https://www.eacoophp.com, All rights reserved.         
+// +----------------------------------------------------------------------
+// | [EacooPHP] 并不是自由软件,可免费使用,未经许可不能去掉EacooPHP相关版权。
+// | 禁止在EacooPHP整体或任何部分基础上发展任何派生、修改或第三方版本用于重新分发
+// +----------------------------------------------------------------------
+// | Author:  心云间、凝听 <981248356@qq.com>
+// +----------------------------------------------------------------------
 /**
  * 友好的时间显示
  *
@@ -8,11 +17,11 @@
  * @return string
  */
 function friendly_date($sTime,$type = 'normal',$alt = 'false') {
-    if (!$sTime)
+    if (!$sTime || !is_timestamp($sTime))
         return '';
     //sTime=源时间，cTime=当前时间，dTime=时间差
     $cTime      =   time();
-    $dTime      =   $cTime - $sTime;
+    $dTime      =   $cTime-$sTime;
     $dDay       =   intval(date("z",$cTime)) - intval(date("z",$sTime));
     //$dDay     =   intval($dTime/3600/24);
     $dYear      =   intval(date("Y",$cTime)) - intval(date("Y",$sTime));
@@ -50,6 +59,8 @@ function friendly_date($sTime,$type = 'normal',$alt = 'false') {
             return intval($dDay/7) . '周前';
         } elseif( $dDay > 30 ){
             return intval($dDay/30) .'个月前';
+        } else{
+           return date("Y-m-d H:i",$sTime); 
         }
         //full: Y-m-d , H:i:s
     } elseif($type=='full'){
@@ -72,6 +83,19 @@ function friendly_date($sTime,$type = 'normal',$alt = 'false') {
 }
 
 /**
+ * 判断是否是时间戳
+ * @param  string $timestamp [description]
+ * @return boolean [description]
+ * @date   2018-10-06
+ * @author 心云间、凝听 <981248356@qq.com>
+ */
+function is_timestamp($timestamp ='')
+{
+    if (!$timestamp) return false;
+    return $is_unixtime = ctype_digit($timestamp) && $timestamp <= 2147483647;
+}
+
+/**
  * 时间戳格式化
  * @param int $time
  * @return string 完整的时间显示
@@ -88,14 +112,17 @@ function time_format($time = NULL, $format = 'Y-m-d H:i') {
  * @param string $type        时间显示  说说： 0 1987-11-09  1 1987年11月09日
  * @return [type]           [description]
  */
-function getUserAge($birthday) {
-    $str = substr($birthday,0,4);               //出生日期
-    $year = date('Y',time());                   //本年  
-    return $age = $year - $str;                 //个人年龄
-}
+// function getUserAge($birthday) {
+//     $str = substr($birthday,0,4);               //出生日期
+//     $year = date('Y',time());                   //本年  
+//     return $age = $year - $str;                 //个人年龄
+// }
 
 //转换剩余时间格式
-function gettime($time){
+function get_surplus_time($time = 0){
+    if (!$time) {
+        return false;
+    }
     if ($time < 0) {  
         return '已结束';  
     } else {  

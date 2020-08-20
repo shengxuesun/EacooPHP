@@ -2,12 +2,12 @@
 // +----------------------------------------------------------------------
 // | PHP version 5.4+                
 // +----------------------------------------------------------------------
-// | Copyright (c) 2014-2016 http://www.eacoo123.com, All rights reserved.
+// | Copyright (c) 2014-2016 https://www.eacoophp.com, All rights reserved.
 // +----------------------------------------------------------------------
 // | Author: 心云间、凝听 <981248356@qq.com>
 // +----------------------------------------------------------------------
 
-use com\EacooAccredit;
+use eacoo\EacooAccredit;
 
 // 检测环境是否支持可写
 define('IS_WRITE', true);
@@ -19,10 +19,11 @@ define('IS_WRITE', true);
 function check_env(){
 	$items = [
 		'os'      => ['操作系统', '不限制', '类Unix', PHP_OS, 'bg-green'],
-		'php'     => ['PHP版本', '5.4.0', '5.3+', PHP_VERSION, 'bg-green'],
+		'php'     => ['PHP版本', '7.0.0', '5.6+', PHP_VERSION, 'bg-green'],
 		'upload'  => ['附件上传', '不限制', '2M+', '未知', 'bg-green'],
 		'gd'      => ['GD库', '2.0', '2.0+', '未知', 'bg-green'],
-		'disk'    => ['磁盘空间', '5M', '不限制', '未知', 'bg-green'],
+		'fileinfo'=> ['fileinfo扩展', '1.0.5', '1.0+', '未知', 'bg-green'],
+		'disk'    => ['磁盘空间', '50M', '不限制', '未知', 'bg-green'],
 	];
 
 	//PHP环境检测
@@ -46,6 +47,15 @@ function check_env(){
 	}
 	unset($tmp);
 
+	//fileinfo扩展检测
+	if(!extension_loaded('fileinfo')){
+		$items['fileinfo'][3] = '未安装';
+		$items['fileinfo'][4] = 'bg-yellow';
+		session('error', true);
+	} else{
+		$items['fileinfo'][3] = '已开启';
+	}
+
 	//磁盘空间检测
 	if(function_exists('disk_free_space')) {
 		$items['disk'][3] = floor(disk_free_space(ROOT_PATH) / (1024*1024)).'M';
@@ -59,20 +69,22 @@ function check_env(){
  * @return array 检测数据
  */
 function check_dirfile(){
-	$items = array(
-		array('dir',  '可写', 'bg-green', 'public/uploads/file/'),
-		array('dir',  '可写', 'bg-green', 'public/uploads/avatar/'),
-		array('dir',  '可写', 'bg-green', 'public/uploads/download/'),
-		array('dir',  '可写', 'bg-green', 'public/uploads/picture/'),
-		array('dir',  '可写', 'bg-green', 'public/uploads/editor/'),
-		array('dir',  '可写', 'bg-green', 'public/static/plugins/'),
-		array('dir',  '可写', 'bg-green', 'data/backup/'),
+	$items = [
+		['dir',  '可写', 'bg-green', 'public/uploads/file/'],
+		['dir',  '可写', 'bg-green', 'public/uploads/avatar/'],
+		['dir',  '可写', 'bg-green', 'public/uploads/picture/'],
+		['dir',  '可写', 'bg-green', 'public/static/plugins/'],
+		['dir',  '可写', 'bg-green', 'apps/'],
+		['dir',  '可写', 'bg-green', 'data/backup/'],
 
-	);
+	];
 
 	foreach ($items as &$val) {
 		$item =	ROOT_PATH.$val[3];
 		if('dir' == $val[0]){
+			if (!is_dir($item)) {
+				@mkdirs($item);
+			}
 			if(!is_writable($item)) {
 				if(is_dir($item)) {
 					$val[1] = '可读';
@@ -143,7 +155,7 @@ function write_config($config){
 			$conf = str_replace("[{$name}]", $value, $conf);
 		}
 		//安装信息
-        EacooAccredit::execute();
+        EacooAccredit::runAccredit();
 		//file_put_contents(APP_PATH . 'install.lock', 'ok');
 
 		//写入应用配置文件
@@ -162,34 +174,45 @@ function write_config($config){
  * @param  resource $db 数据库连接资源
  */
 function create_tables($db, $prefix = ''){
-	//读取SQL文件
-	$sql = file_get_contents(APP_PATH . 'install/data/install.sql');
-	$sql = str_replace("\r", "\n", $sql);
-	$sql = explode(";\n", $sql);
-
-	//替换表前缀
-	$orginal = 'eacoo_';
-	$sql = str_replace(" `{$orginal}", " `{$prefix}", $sql);
-
-	//开始安装
-	show_msg('开始安装数据库...');
-	foreach ($sql as $value) {
-		$value = trim($value);
-		if(empty($value)) continue;
-		if(substr($value, 0, 12) == 'CREATE TABLE') {
-			$name = preg_replace("/^CREATE TABLE `(\w+)` .*/s", "\\1", $value);
-			$msg  = "创建数据表{$name}";
-			if(false !== $db->execute($value)){
-				show_msg($msg . '...成功');
-			} else {
-				show_msg($msg . '...失败！', 'error');
-				session('error', true);
-			}
-		} else {
-			$db->execute($value);
+	try {
+		//读取SQL文件
+		$sql_file = APP_PATH . 'install/data/install.sql';
+		if (!is_file($sql_file)) {
+			throw new \Exception("install.sql文件损坏或目录文件权限不足", 0);
 		}
+		$sql = file_get_contents($sql_file);
+		$sql = str_replace("\r", "\n", $sql);
+		$sql = explode(";\n", $sql);
 
+		//替换表前缀
+		$orginal = 'eacoo_';
+		
+		//开始安装
+		show_msg('开始安装数据库...');
+		foreach ($sql as $sub_sql) {
+			//替换前缀
+			$sub_sql = str_replace(" `{$orginal}", " `{$prefix}", $sub_sql);
+			$sub_sql = trim($sub_sql);
+			if(empty($sub_sql)) continue;
+			if (strpos($sub_sql, 'CREATE TABLE')!==false) {
+				//$name = preg_replace("/^CREATE TABLE `(\w+)` .*/s", "\\1", $sub_sql);
+				preg_match("/CREATE TABLE `(\w+)` .*/i", $sub_sql,$result);
+				$msg  = "创建数据表{$result[1]}";
+				if(false !== $db->execute($sub_sql)){
+					show_msg($msg . '...成功');
+				} else {
+					show_msg($msg . '...失败！', 'error');
+					session('error', true);
+				}
+			} else {
+				$db->execute($sub_sql);
+			}
+
+		}
+	} catch (\Exception $e) {
+		show_msg($e, 'error');
 	}
+	
 }
 
 //创建创始人管理员
@@ -197,12 +220,12 @@ function register_administrator($db, $prefix, $admin){
 	show_msg('开始注册创始人帐号...');
 
 	$password = encrypt($admin['password']);
-
-	$sql = "INSERT INTO `[PREFIX]users` (`uid`,`username`,`password`,`nickname`,`email`, `avatar`,`sex`,`birthday`,`score`,`allow_admin`,`reg_time`,`last_login_ip`,`last_login_time`,`status`) VALUES ".
-		   "('1', '[NAME]', '[PASS]', '创始人', '[EMAIL]','http://img.eacoomall.com/images/static/assets/img/default-avatar.svg', '0', '0', '0', '1', '[TIME]', '[IP]','[TIME]', '1');";
+	
+	$sql = "INSERT INTO `[PREFIX]admin` (`uid`,`username`,`password`,`nickname`,`email`, `avatar`,`bind_uid`,`sex`,`create_time`,`update_time`,`last_login_ip`,`last_login_time`,`status`) VALUES ".
+		   "('1', '[NAME]', '[PASS]', '创始人', '[EMAIL]','http://cdn.eacoo.xin/attachment/static/assets/img/default-avatar.png',1, '0', '[TIME]','[TIME]', '[IP]','[TIME]', '1');";
 	$sql = str_replace(
 		['[PREFIX]', '[NAME]','[PASS]','[EMAIL]','[TIME]', '[IP]'],
-		[$prefix, $admin['username'],$password, $admin['email'], time(), get_client_ip(1)],
+		[$prefix, $admin['username'],$password, $admin['email'], date('Y-m-d H:i:s'), get_client_ip(1)],
 		$sql);
 	$db->execute($sql);
 	show_msg('创始人帐号注册完成！');
@@ -283,10 +306,10 @@ function update_tables($db, $prefix = ''){
  * 及时显示提示信息
  * @param  string $msg 提示信息
  */
-function show_msg($msg, $class = 'primary'){
+function show_msg($msg, $class = 'success'){
 	echo "<script type=\"text/javascript\">showmsg(\"{$msg}\", \"{$class}\")</script>";
-	flush();
 	ob_flush();
+	flush();
 }
 
 /**

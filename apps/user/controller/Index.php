@@ -1,10 +1,59 @@
 <?php
-namespace app\User\controller;
+// 用户首页
+// +----------------------------------------------------------------------
+// | Copyright (c) 2016-2018 https://www.eacoophp.com, All rights reserved.         
+// +----------------------------------------------------------------------
+// | [EacooPHP] 并不是自由软件,可免费使用,未经许可不能去掉EacooPHP相关版权。
+// | 禁止在EacooPHP整体或任何部分基础上发展任何派生、修改或第三方版本用于重新分发
+// +----------------------------------------------------------------------
+// | Author:  心云间、凝听 <981248356@qq.com>
+// +----------------------------------------------------------------------
+namespace app\user\controller;
+use app\home\controller\Home;
 
-class Index
-{
-    public function index()
+use app\common\model\User as UserModel;
+use app\common\logic\User as UserLogic;
+class Index extends Home{
+    function _initialize()
     {
-        return '<style type="text/css">*{ padding: 0; margin: 0; } div{ padding: 4px 48px;} a{color:#2E5CD5;cursor: pointer;text-decoration: none} a:hover{text-decoration:underline; } body{ background: #fff; font-family: "Century Gothic","Microsoft yahei"; color: #333;font-size:18px;} h1{ font-size: 100px; font-weight: normal; margin-bottom: 12px; } p{ line-height: 1.6em; font-size: 42px }</style><div style="padding: 24px 48px;"> <h1>:)</h1><p> ThinkPHP V5<br/><span style="font-size:30px">十年磨一剑 - 为API开发设计的高性能框架</span></p><span style="font-size:22px;">[ V5.0 版本由 <a href="http://www.qiniu.com" target="qiniu">七牛云</a> 独家赞助发布 ]</span></div><script type="text/javascript" src="http://tajs.qq.com/stats?sId=9347272" charset="UTF-8"></script><script type="text/javascript" src="http://ad.topthink.com/Public/static/client.js"></script><thinkad id="ad_bd568ce7058a1091"></thinkad>';
+        parent::_initialize();
+        $this->userModel = new UserModel;
     }
+
+    /*
+     *  Description: 会员列表
+     *  By: yyyvy  <QQ:76836785>
+     *  Time: 2017-12-28 05:09:42
+     * */
+    public function index(){
+
+        $map['status'] = 1; // 禁用和正常状态
+        list($user_list,$total) = $this->userModel->getListByPage($map,'uid,username,nickname,avatar,reg_time','reg_time desc',20);
+        $this->assign('user_list',$user_list);
+        
+        $this->pageInfo('会员列表','users');
+        return $this->fetch();
+
+    }
+
+    /*
+     *  Description: 会员主页
+     *  By: yyyvy  <QQ:76836785>
+     *  Time: 2017-12-28 06:55:11
+     * */
+    public function info($uid = 0){
+        try {
+            if ($uid>0) {
+                $info = UserLogic::info($uid);
+                $this->assign('info',$info);
+                return $this->fetch();
+            }
+            throw new \Exception("用户ID不正确", 0);
+            
+        } catch (\Exception $e) {
+            $this->error($e->getMessage());
+        }
+        
+    }
+
 }

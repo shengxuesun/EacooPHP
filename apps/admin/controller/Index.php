@@ -1,134 +1,120 @@
 <?php
 // +----------------------------------------------------------------------
-// | PHP version 5.4+                
+// | Copyright (c) 2016-2018 https://www.eacoophp.com, All rights reserved.         
 // +----------------------------------------------------------------------
-// | Copyright (c) 2014-2016 http://www.eacoo123.com, All rights reserved.
+// | [EacooPHP] 并不是自由软件,可免费使用,未经许可不能去掉EacooPHP相关版权。
+// | 禁止在EacooPHP整体或任何部分基础上发展任何派生、修改或第三方版本用于重新分发
 // +----------------------------------------------------------------------
-// | Author: 心云间、凝听 <981248356@qq.com>
+// | Author:  心云间、凝听 <981248356@qq.com>
 // +----------------------------------------------------------------------
 namespace app\admin\controller;
-use app\common\controller\Base;
+use eacoo\EacooAccredit;
 
-use app\common\model\User;
-use think\captcha\Captcha;
-use think\Url;
-
-class Index extends Base
+class Index extends Admin
 {
-    public function _initialize() {
-        parent::_initialize();
-
-        if (SERVER_SOFTWARE_TYPE=='nginx') {
-            Url::root('/admin.php?s=');
-        } else{
-            Url::root('/admin.php');
-        }
-    }
 
     /**
-     * 后台登录
+     * 首页
+     * @return mixed [type] [description]
+     * @date   2018-02-05
+     * @author 心云间、凝听 <981248356@qq.com>
      */
-    public function login(){ 
+    public function index()
+    {
+        $this->assign('meta_title','首页');
+        $this->assign('current_message_count',0);//当前消息数量
 
-        if(session('user_login_auth')) $this->redirect('admin/dashboard/index');
-
-        if (IS_POST) {
-          $data = input('post.');
-          $result = $this->validate($data,[
-                                        ['username','require|min:1','登录名不能为空|登录名格式不正确'],
-                                        ['password','require|length:6,32','请填写密码|密码格式不正确']
-                                    ]);
-          if(true !== $result){
-              // 验证失败 输出错误信息
-              $this->error($result);
-              exit;
-          }
-
-          $login = User::where(['username|email|mobile' => $data['username'],'status'=>1])->field('allow_admin')->find();
-
-          if (!empty($login)) {
-              if ($login['allow_admin']!=1) {
-                $this->error('该用户不允许登录后台');
-              }
-           } else{
-              $this->error('该用户不存在或禁用');
-           }
-
-           $captcha = new Captcha();
-            if(!$captcha->check($data['captcha'],1)){
-                $this->error('验证码错误');
-            }
-            $rememberme = $data['rememberme']==1 ? true : false;
-
-            $result = User::login($data['username'],$data['password'], $rememberme);
-            if ($result['code']==1) {
-                $uid = !empty($result['data']['uid']) ? $result['data']['uid']:0;
-                $this->success('登录成功！',url('admin/dashboard/index'));
-
-            } elseif ($result['code']==0) {
-                $this->error($result['msg']);
-            } else {
-                $this->logout();
-            }
-
-        } else{
-            return $this->fetch('public/login');
-        }
+        $install_lock = json_decode(file_get_contents(APP_PATH . 'install.lock'),true);
+        $this->assign('accredit_status',$install_lock['accredit_status']);
+        return $this->fetch();
     }
 
-    /**
-     * 退出登录
-     * @return [type] [description]
-     */
-    public function logout(){
-        session(null);
-        cookie(null,config('cookie.prefix'));
-        $this->redirect('admin/index/login');
-    }
-    
     /**
      * 清理缓存
      * @return [type] [description]
      */
-    public function delcache() { 
-           header("Content-type: text/html; charset=utf-8");
-          //清文件缓存
-          $dirs = [ROOT_PATH.'runtime/'];
-          @mkdir('runtime',0777,true);
-          //清理缓存
-          foreach($dirs as $dir) {
-              $this->rmdirr($dir);
-          }
-          cache('admin_sidebar_menus',null);//清空后台菜单缓存
-          cache('DB_CONFIG_DATA',null);
-          $this->success('清除缓存成功！');
-     } 
-
-     //图片验证码
-    public function verify_img($id = 1){
-        $captcha = new Captcha((array)config('captcha'));
-        return $captcha->entry($id);
+    public function delCache() { 
+        //防止认证信息被清理
+        $eacoo_identification = cache('eacoo_identification');
+        header("Content-type: text/html; charset=utf-8");
+        //清文件缓存
+        $dirs = [ROOT_PATH.'runtime/'];
+        @mkdir('runtime',0777,true);
+        //清理缓存
+        foreach($dirs as $dir) {
+            rmdirs($dir);
+        }
+        //清理缓存
+        logic('index')->clearCache();
+        //防止认证信息被清理
+        cache('eacoo_identification',$eacoo_identification);
+        $this->success('清除缓存成功！');
     }
-    /////////////下面是处理方法
+
+    /**
+     * 刷新授权信息
+     * @return void [type] [description]
+     * @date   2018-03-04
+     * @author 心云间、凝听 <981248356@qq.com>
+     */
+    public function refreshAccreditInfo()
+    {
+        EacooAccredit::runAccredit(['access_token'=>ACCREDIT_TOKEN]);
+        $this->success('刷新成功');
+    }
+
+    /**
+     * 获取侧边栏菜单
+     * @return [type] [description]
+     * @date   2018-02-12
+     * @author 心云间、凝听 <981248356@qq.com>
+     */
+    public function getSidebarMenus()
+    {
+        try {
+            $default_header_menu_module = cookie('default_header_menu_module');
+            if (empty($default_header_menu_module)) {
+                $default_header_menu_module = 'admin';
+            }
+            $position = input('param.position',$default_header_menu_module);
+            $result = logic('index')->getAdminSidebarMenu($position);
+            cookie('default_header_menu_module',$position);
+            return json(['code'=>1,'msg'=>'获取侧边栏菜单成功','data'=>$result]);
+        } catch (\Exception $e) {
+            return json(['code'=>$e->getCode(),'msg'=>$e->getMessage(),'data'=>[]]);
+        }
+    }
+
+    /**
+     * 获取顶部收藏菜单
+     * @return [type] [description]
+     * @date   2018-02-15
+     * @author 心云间、凝听 <981248356@qq.com>
+     */
+    public function getCollectMenus()
+    {
+        try {
+            $admin_uid = is_admin_login();
+            $result = logic('index')->getAdminCollectMenus($admin_uid);
+            return json(['code'=>1,'msg'=>'获取顶部收藏菜单成功','data'=>$result]);
+        } catch (\Exception $e) {
+            return json(['code'=>$e->getCode(),'msg'=>$e->getMessage(),'data'=>[]]);
+        }
         
-     public function rmdirr($dirname) {
-          if (!file_exists($dirname)) {
-                return false;
-          }
-          if (is_file($dirname) || is_link($dirname)) {
-                return unlink($dirname);
-          }
-          $dir = dir($dirname);
-          if($dir){
-               while (false !== $entry = $dir->read()) {
-                if ($entry == '.' || $entry == '..') {
-                 continue;
-                }
-                //递归
-                $this->rmdirr($dirname . DIRECTORY_SEPARATOR . $entry);
-               }
-          }
-          $dir->close();
-          return rmdir($dirname);
+    }
+
+    /**
+     * 设置顶部模块菜单
+     * @date   2018-12-02
+     * @author 心云间、凝听 <981248356@qq.com>
+     */
+    public function setHeaderModulesMenus()
+    {
+        try {
+            $result = logic('index')->getModuleMenus();
+            return json(['code'=>1,'msg'=>'获取顶部模块菜单成功','data'=>$result]);
+        } catch (\Exception $e) {
+            return json(['code'=>$e->getCode(),'msg'=>$e->getMessage(),'data'=>[]]);
+        }
     }
 }

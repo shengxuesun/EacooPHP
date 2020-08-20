@@ -33,16 +33,16 @@ $config = [
     'root_namespace'         => [],
     // 扩展函数文件
     'extra_file_list'        => [
-        APP_PATH . 'functions/api.php',
         APP_PATH . 'functions/array.php',
         APP_PATH . 'functions/string.php',
-        APP_PATH . 'functions/wechat.php', 
         APP_PATH . 'functions/time.php',
         APP_PATH . 'functions/request.php',
         APP_PATH . 'functions/attachment.php', 
         APP_PATH . 'functions/role.php',
-        APP_PATH . 'functions/term.php', 
+        APP_PATH . 'functions/term.php',
+        APP_PATH . 'functions/admin.php',
         APP_PATH . 'functions/user.php',
+        APP_PATH . 'custom_function.php',
         THINK_PATH . 'helper' . EXT
     ],
     // 默认输出类型
@@ -134,7 +134,9 @@ $config = [
         // 模板后缀
         'view_suffix'  => 'html',
         // 模板文件名分隔符
-        //'view_depr'    => '_',
+        'view_depr'    => DS,
+        // 默认模板渲染规则 1 解析为小写+下划线 2 全部转换小写
+        'auto_rule'   => 1,
         // 模板引擎普通标签开始标记
         'tpl_begin'    => '{',
         // 模板引擎普通标签结束标记
@@ -145,22 +147,22 @@ $config = [
         'taglib_end'   => '}',
     ],
     // 默认跳转页面对应的模板文件
-    'dispatch_success_tmpl'  => THINK_PATH . 'tpl' . DS . 'dispatch_jump.tpl',
-    'dispatch_error_tmpl'    => THINK_PATH . 'tpl' . DS . 'dispatch_jump.tpl',
+    'dispatch_success_tmpl'  => APP_PATH . 'common/tpl' . DS . 'dispatch_jump.tpl',
+    'dispatch_error_tmpl'    => APP_PATH . 'common/tpl' . DS . 'dispatch_jump.tpl',
 
     // +----------------------------------------------------------------------
     // | 异常及错误设置
     // +----------------------------------------------------------------------
 
     // 异常页面的模板文件
-    'exception_tmpl'         => THINK_PATH . 'tpl' . DS . 'think_exception.tpl',
+    'exception_tmpl'         => APP_PATH . 'common/tpl' . DS . 'eacoo_exception.tpl',
 
     // 错误显示信息,非调试模式有效
     'error_message'          => '页面错误！请稍后再试～',
     // 显示错误信息
     'show_error_msg'         => false,
     // 异常处理handle类 留空使用 \think\exception\Handle
-    'exception_handle'       => '',
+    'exception_handle'       => '\\app\\common\\exception\\EacooHttp',
 
     // +----------------------------------------------------------------------
     // | 日志设置
@@ -182,136 +184,7 @@ $config = [
         // 内置Html Console 支持扩展
         'type' => 'Html',
     ],
-
-    // +----------------------------------------------------------------------
-    // | 缓存设置
-    // +----------------------------------------------------------------------
-
-    'cache'                  => [
-        // 驱动方式
-        'type'   => 'File',
-        // 缓存保存目录
-        'path'   => CACHE_PATH,
-        // 缓存前缀
-        'prefix' => '',
-        // 缓存有效期 0表示永久缓存
-        'expire' => 0,
-    ],
-
-    // +----------------------------------------------------------------------
-    // | 会话设置
-    // +----------------------------------------------------------------------
-
-    'session'  => [
-        'id'             => '',
-        // SESSION_ID的提交变量,解决flash上传跨域
-        'var_session_id' => '',
-        // SESSION 前缀
-        'prefix'         => 'eacoophp_',
-        // 驱动方式 支持redis memcache memcached
-        'type'           => '',
-        // 是否自动开启 SESSION
-        'auto_start'     => true,
-    ],
-    // +----------------------------------------------------------------------
-    // | Cookie设置
-    // +----------------------------------------------------------------------
-    'cookie'                 => [
-        // cookie 名称前缀
-        'prefix'    => 'eacoophp_',
-        // cookie 保存时间
-        'expire'    => 0,
-        // cookie 保存路径
-        'path'      => '/',
-        // cookie 有效域名
-        'domain'    => '',
-        //  cookie 启用安全传输
-        'secure'    => false,
-        // httponly设置
-        'httponly'  => '',
-        // 是否使用 setcookie
-        'setcookie' => true,
-    ],
-    // +----------------------------------------------------------------------
-    // | 附件上传
-    // +----------------------------------------------------------------------
-    'file_upload' => [
-        // 允许上传的文件MiMe类型
-        'mimes'    => '',
-        // 上传的文件大小限制 (0-不做限制)
-        'maxSize'  => 2*1024*1024,
-        // 允许上传的文件后缀
-        'exts'     => 'xml,xlsx,doc,docx,zip,key',
-        // 子目录创建方式，[0]-函数名，[1]-参数，多个参数使用数组
-        'subName'  => ['date', 'Y-m-d'],
-        //保存根路径
-        'rootPath' => './uploads/attachment',
-        // 保存路径
-        'savePath' => '',
-        // 上传文件命名规则，date,md5,sha1,自定义规则
-        'saveName' => 'uniqid',
-        // 文件上传驱动e,
-        'driver'   => 'local',
-    ],
-    'editor_upload'     => array(
-        // 允许上传的文件MiMe类型
-        'mimes'    => [],
-        // 上传的文件大小限制 (0-不做限制)
-        'maxSize'  => 2*1024*1024,
-        // 允许上传的文件后缀
-        'exts'     => '',
-        // 子目录创建方式，[0]-函数名，[1]-参数，多个参数使用数组
-        'subName'  => ['date', 'Y-m-d'],
-        //保存根路径
-        'rootPath' => './uploads/editor',
-        // 保存路径
-        'savePath' => '',
-        // 上传文件命名规则，date,md5,sha1,自定义规则
-        'saveName' => 'uniqid',
-        // 文件上传驱动e,
-        'driver'   => 'local',
-    ),
-
-    'picture_upload'    => array(
-        // 允许上传的文件MiMe类型
-        'mimes'    => 'image/*',
-        // 上传的文件大小限制
-        'maxSize'  => 2*1024*1024,
-        // 允许上传的文件后缀
-        'exts'     => 'gif,jpg,jpeg,bmp,png',
-        // 子目录创建方式，[0]-函数名，[1]-参数，多个参数使用数组
-        'subName'  => ['date', 'Y-m-d'],
-        //保存根路径
-        'rootPath' => './uploads/picture',
-        // 保存路径
-        'savePath' => '',
-        // 上传文件命名规则，date,md5,sha1,自定义规则
-        'saveName' => 'uniqid',
-        // 文件上传驱动e,
-        'driver'   => 'local',
-    ),
-    'avatar_upload'    => array(
-        // 允许上传的文件MiMe类型
-        'mimes'    => [],
-        // 上传的文件大小限制
-        'maxSize'  => 2*1024*1024,
-        // 允许上传的文件后缀
-        'exts'     => 'gif,jpg,jpeg,bmp,png',
-        // 子目录创建方式，[0]-函数名，[1]-参数，多个参数使用数组
-        'subName'  => ['date', 'Y-m-d'],
-        //保存根路径
-        'rootPath' => './uploads/avatar',
-        // 保存路径
-        'savePath' => '',
-        // 上传文件命名规则，date,md5,sha1,自定义规则
-        'saveName' => 'uniqid',
-        // 文件上传驱动e,
-        'driver'   => 'local',
-    ),
-    //权限
-    'auth'  =>[
-        //'auth_admin_uids'=>[1],
-    ],
+    
     //分页配置
     'paginate'      => [
         'type'      => 'bootstrap',
@@ -335,9 +208,9 @@ if (MODULE_MARK=='admin') {
         // 默认模块名
         'default_module'         => 'admin',
         // 默认控制器名
-        'default_controller'     => 'Index',
+        'default_controller'     => 'Login',
         // 默认操作名
-        'default_action'         => 'login',
+        'default_action'         => 'index',
         // +----------------------------------------------------------------------
         // | 会话设置
         // +----------------------------------------------------------------------
@@ -356,7 +229,7 @@ if (MODULE_MARK=='admin') {
         // +----------------------------------------------------------------------
         // | Cookie设置
         // +----------------------------------------------------------------------
-        'cookie'                 => [
+        'cookie' => [
             // cookie 名称前缀
             'prefix'    => 'eacoophpAdmin_',
             // cookie 保存时间

@@ -1,66 +1,71 @@
-{extend name="public/base"/}
+{extend name="$_admin_public_base_"/}
   {block name="style"}
     <!--此页面增加的style-->
   {/block}
 {block name="main"}
-
-    <div class="cf">
-        <ul class="nav nav-tabs">
-            <li class="active"><a href="{:url('admin/Database/index',['type'=>'export'])}">数据备份</a></li>
-             <li class=""><a href="{:url('admin/Database/index',['type'=>'import'])}">数据恢复</a></li>
-        </ul>
-        <div class="mt-10">
-            <a id="export" class="btn btn-success" href="javascript:;" autocomplete="off">立即备份</a>
-            <a id="optimize" class="btn btn-success" href="{:url('optimize')}">优化表</a>
-            <a id="repair" class="btn btn-success" href="{:url('repair')}">修复表</a>
+<section class="content pt-5">
+<div class="box box-solid eacoo-box">
+    <div class="box-body">
+        <div class="cf eacoo-tabs">
+            <ul class="nav nav-tabs">
+                <li class="active"><a href="{:url('admin/Database/index',['type'=>'export'])}">数据备份</a></li>
+                 <li class=""><a href="{:url('admin/Database/index',['type'=>'import'])}">数据恢复</a></li>
+            </ul>
+            <div class="mt-10">
+                <a id="export" class="btn btn-primary" href="javascript:;" autocomplete="off"><i class="fa fa-download"></i> 立即备份</a>
+                <a id="optimize" class="btn btn-primary" href="{:url('optimize')}"><i class="fa fa-shield"></i> 优化表</a>
+                <a id="repair" class="btn btn-primary" href="{:url('repair')}"><i class="fa fa-wrench"></i> 修复表</a>
+            </div>
         </div>
-    </div>
 
-    <!-- 应用列表 -->
-    <div class="data-table table-striped">
-        <form id="export-form" method="post" action="{:url('export')}">
-            <table class="table table-hover table-responsive">
-                <thead>
-                    <tr>
-                        <th width="48" class="checkbox-toggle"><input class="check-all" checked="chedked" type="checkbox" value=""></th>
-                        <th>表名</th>
-                        <th width="120">类型</th>
-                        <th width="120">编码</th>
-                        <th width="120">记录数</th>                      
-                        <th width="120">大小</th>
-                        <th width="120">备注</th>
-                        <th width="120">状态</th>
-                        <th width="120">操作</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {volist name="list" id="table"}
+        <!-- 应用列表 -->
+        <div class="data-table table-striped">
+            <form id="export-form" method="post" action="{:url('export')}">
+                <table class="table table-hover table-responsive">
+                    <thead>
                         <tr>
-                            <td class="num">
-                                <input class="ids" checked="chedked" type="checkbox" name="tables[]" value="{$table.name}">
-                            </td>
-                            <td>{$table.name}</td>
-                            <td>{$table.engine}</td>
-                            <td>{$table.collation}</td>
-                            <td>{$table.rows}</td>
-                            <td>{$table.data_length|format_bytes}</td>
-                            <td>{$table.comment}</td>
-                            <td class="info">未备份</td>
-                            <td class="action">
-                                <a class="ajax-get no-refresh" href="{:url('optimize?tables='.$table['name'])}">优化表</a>&nbsp;
-                                <a class="ajax-get no-refresh" href="{:url('repair?tables='.$table['name'])}">修复表</a>
-                            </td>
+                            <th width="48" class="checkbox-toggle"><input class="check-all" checked="chedked" type="checkbox" value=""></th>
+                            <th>表名</th>
+                            <th width="120">引擎</th>
+                            <th width="120">编码</th>
+                            <th width="120">记录数</th>                      
+                            <th width="120">大小</th>
+                            <th width="120">备注</th>
+                            <th width="120">状态</th>
+                            <th width="120">操作</th>
                         </tr>
-                    {/volist}
-                </tbody>
-            </table>
-        </form>
+                    </thead>
+                    <tbody>
+                        {volist name="list" id="table"}
+                            <tr>
+                                <td class="num">
+                                    <input class="ids" checked="chedked" type="checkbox" name="tables[]" value="{$table.name}">
+                                </td>
+                                <td>{$table.name}</td>
+                                <td>{$table.engine}</td>
+                                <td>{$table.collation}</td>
+                                <td>{$table.rows}</td>
+                                <td>{$table.data_length|format_bytes}</td>
+                                <td>{$table.comment}</td>
+                                <td class="info">未备份</td>
+                                <td class="action">
+                                    <a class="ajax-get no-refresh" href="{:url('optimize?tables='.$table['name'])}">优化表</a>&nbsp;
+                                    <a class="ajax-get no-refresh" href="{:url('repair?tables='.$table['name'])}">修复表</a>
+                                </td>
+                            </tr>
+                        {/volist}
+                    </tbody>
+                </table>
+            </form>
+        </div>
+        <!-- /应用列表 -->
     </div>
-    <!-- /应用列表 -->
+</div>
+</section>
 {/block}
 
 {block name="script"}
-    <script type="text/javascript">
+<script type="text/javascript">
     (function($){
         var $form = $("#export-form"), $export = $("#export"), tables
             $optimize = $("#optimize"), $repair = $("#repair");
@@ -86,7 +91,7 @@
             $.post(
                 $form.attr("action"),
                 $form.serialize(),
-                function(data){console.debug(data);
+                function(data){
                     if(data.code==1){
                         var info = data.data;
                         tables = info.tables;
@@ -94,7 +99,7 @@
                         backup(info.tab);
                         window.onbeforeunload = function(){ return "正在备份数据库，请不要关闭！" }
                     } else {
-                        updateAlert(data.msg,'danger');
+                        updateAlert(data.msg,'error');
                         $export.parent().children().removeClass("disabled");
                         $export.html("立即备份");
                         setTimeout(function(){
@@ -138,6 +143,7 @@
         function showmsg(id, msg){console.debug(tables);
             $form.find("input[value=" + tables[id] + "]").closest("tr").find(".info").html(msg);
         }
+
     })(jQuery);
-    </script>
+</script>
 {/block}

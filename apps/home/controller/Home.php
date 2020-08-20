@@ -1,14 +1,17 @@
 <?php
+// 前台基类
 // +----------------------------------------------------------------------
-// | Copyright (c) 2017 http://www.eacoo123.com All rights reserved.
+// | Copyright (c) 2016-2018 https://www.eacoophp.com, All rights reserved.         
 // +----------------------------------------------------------------------
-// | Licensed ( http://www.apache.org/licenses/LICENSE-2.0 )
+// | [EacooPHP] 并不是自由软件,可免费使用,未经许可不能去掉EacooPHP相关版权。
+// | 禁止在EacooPHP整体或任何部分基础上发展任何派生、修改或第三方版本用于重新分发
 // +----------------------------------------------------------------------
 // | Author:  心云间、凝听 <981248356@qq.com>
 // +----------------------------------------------------------------------
 namespace app\home\controller;
 use app\common\controller\Base;
 use think\Loader;
+use think\Request;
 class Home extends Base {
 
      function _initialize() {
@@ -20,7 +23,9 @@ class Home extends Base {
 
         $this->currentUser = session('user_login_auth');
         $this->assign('current_user', $this->currentUser);
-        
+        $this->assign('header_menus',logic('Nav')->getNavigationMenus('header'));
+        $this->assign('users_menus',logic('Nav')->getNavigationMenus('my'));
+        $this->assign('current',logic('Nav')->current());
         $this->assign('_theme_public_', config('theme_public'));  // 页面公共继承模版
         $this->assign('_theme_public_layout', config('theme_public').'layout.html');  // 页面公共继承模版
     }
@@ -50,7 +55,7 @@ class Home extends Base {
      * @param  string $mark   [description]
      * @return [type]         [description]
      */
-    public function pageConfig($title='',$mark='',$extend=[])
+    public function pageInfo($title='',$mark='',$extend=[])
     {
         $page_config = [
             'title'  => $title,
@@ -71,10 +76,63 @@ class Home extends Base {
     protected function breadCrumbs($page_config = [])
     {
         $crumbs = '';
-        $module_info = db('modules')->where(['name'=>MODULE_NAME])->field('title')->find();
-        $crumbs.='<li><a href="'.$this->url.'">'.$module_info['title'].'</a></li>';
+        if (isset($page_config['crumb_parent_title'])) {
+            if(!empty($page_config['crumb_parent_title'])) $crumbs.='<li><a href="'.$this->url.'">'.$page_config['crumb_parent_title'].'</a></li>';
+        } else{
+            $module_info = db('modules')->where(['name'=>MODULE_NAME])->field('title')->find();
+            $crumbs.='<li><a href="'.$this->url.'">'.$module_info['title'].'</a></li>';
+        }
         $crumbs.='<li class="active">'.$page_config['title'].'</li>';
 
         return '<li><a href="'.url('home/index/index').'"><i class="fa fa-dashboard"></i> 首页</a></li>'.$crumbs;
+    }
+
+    /**
+     * 模版输出
+     * @param  string $templateFile 模板文件名
+     * @param  array  $vars         模板输出变量
+     * @param  array  $replace      模板替换
+     * @param  array  $config       模板参数
+     * @param  array  $render       是否渲染内容
+     * @return [type]               [description]
+     */
+    public function fetch($template = '', $vars = [], $replace = [], $config = [] ,$render=false) {
+        $ACTION_NAME = Request::instance()->action(true);   //处理驼峰写法模板兼容，一定要给true，不然方法名会自动变小写；
+
+        if (!is_file($template)) {
+            $controller = $this->request->controller();
+            if (strpos($controller, '.')!==false) {
+                $controller = str_replace('.', '/_', $controller);
+            }
+            $controller = strtolower($controller);
+            if (empty($template)) {
+                $template_name = $controller.'/'.self::toUnderScore($this->request->action(true));
+            } else{
+                $template_name = $controller.'/'.$template;
+            }
+            // 当前模版文件
+            $template = config('template.view_path').$template_name.'.'.config('template.view_suffix'); //当前主题模版是否存在
+            if (!is_file($template)) {
+                $template = APP_PATH.MODULE_NAME. '/view/'.$template_name. '.' .config('template.view_suffix');
+                if (!is_file($template)) {
+                    throw new \Exception('模板不存在：'.$template, 5001);
+                }
+            }
+        }
+        return $this->view->fetch($template, $vars, $replace, $config, $render);
+    }
+
+
+    /*
+     *  驼峰写法 转换大写为下划线加小写
+     *  @param  string $str 需要转换的字符串
+     *  @time: 2018-10-12
+     *  @author: yyyvy <76836785@qq.com>
+     * */
+    public static function toUnderScore($str){
+        $str = preg_replace_callback('/_([a-zA-Z])/', function ($match) {
+            return strtoupper($match[1]);
+        }, $str);
+        return strtolower(trim(preg_replace("/[A-Z]/", "_\\0", $str), "_"));
     }
 }

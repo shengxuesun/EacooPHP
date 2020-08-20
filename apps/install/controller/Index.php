@@ -1,21 +1,27 @@
 <?php
+// 安装
 // +----------------------------------------------------------------------
-// | PHP version 5.4+                
+// | Copyright (c) 2016-2018 https://www.eacoophp.com, All rights reserved.         
 // +----------------------------------------------------------------------
-// | Copyright (c) 2014-2016 http://www.eacoo123.com, All rights reserved.
+// | [EacooPHP] 并不是自由软件,可免费使用,未经许可不能去掉EacooPHP相关版权。
+// | 禁止在EacooPHP整体或任何部分基础上发展任何派生、修改或第三方版本用于重新分发
 // +----------------------------------------------------------------------
-// | Author: 心云间、凝听 <981248356@qq.com>
+// | Author:  心云间、凝听 <981248356@qq.com>
 // +----------------------------------------------------------------------
 
 namespace app\install\controller;
 use think\Controller;
 use think\Db;
 
+ini_set('display_errors', 'off');
+error_reporting(0);
+
 class Index extends Controller {
 
 	protected $status;
 
 	public function _initialize() {
+
 		$this->status = [
 			'index'    => 'info',
 			'check'    => 'info',
@@ -25,11 +31,17 @@ class Index extends Controller {
 		];
 
 		if ($this->request->action() != 'complete' && is_file(APP_PATH . 'database.php') && is_file(APP_PATH . 'install.lock')) {
-			return $this->redirect('admin/index/login');
+			return $this->redirect('admin/login/index');
 		}
 		$this->assign('product_name',config('product_name'));//产品名
 	}
 
+	/**
+	 * 安装须知
+	 * @return [type] [description]
+	 * @date   2018-03-12
+	 * @author 心云间、凝听 <981248356@qq.com>
+	 */
 	public function index() {
 		$this->status['index'] = 'primary';
 		$this->assign('status', $this->status);
@@ -47,29 +59,40 @@ class Index extends Controller {
 	 * @author 心云间、凝听 <981248356@qq.com>
 	 */
 	public function check() {
-		session('error', false);
+		if ($this->request->isPost()) {
+			try {
+				if (session('error')) {
+					throw new \Exception("环境检测没有通过，请调整环境后重试！", 0);
+				}
+			} catch (\Exception $e) {
+				$this->error($e->getMessage());
+			}
+			$this->success('恭喜您环境检测通过', url('config'));
+		} else{
+			session('error', false);
+			//环境检测
+			$env = check_env();
 
-		//环境检测
-		$env = check_env();
+			//目录文件读写检测
+			if (IS_WRITE) {
+				$dirfile = check_dirfile();
+				$this->assign('dirfile', $dirfile);
+			}
 
-		//目录文件读写检测
-		if (IS_WRITE) {
-			$dirfile = check_dirfile();
-			$this->assign('dirfile', $dirfile);
+			//函数检测
+			$func = check_func();
+
+			session('step', 1);
+
+			$this->assign('env', $env);
+			$this->assign('func', $func);
+
+			$this->status['index'] = 'success';
+			$this->status['check'] = 'primary';
+			$this->assign('status', $this->status);
+			return $this->fetch();
 		}
-
-		//函数检测
-		$func = check_func();
-
-		session('step', 1);
-
-		$this->assign('env', $env);
-		$this->assign('func', $func);
-
-		$this->status['index'] = 'success';
-		$this->status['check'] = 'primary';
-		$this->assign('status', $this->status);
-		return $this->fetch();
+		
 	}
 
 	/**
@@ -116,10 +139,17 @@ class Index extends Controller {
 			//创建数据库
 			$dbname = $db['database'];
 			unset($db['database']);
-			$db_obj  = \think\Db::connect($db);
-			$sql = "CREATE DATABASE IF NOT EXISTS `{$dbname}` DEFAULT CHARACTER SET utf8";
-			if (!$db_obj->execute($sql)) {
-				return $this->error($db_obj->getError());
+			$db_instance  = \think\Db::connect($db);
+			// 检测数据库连接
+            try{
+                $db_instance->execute('select version()');
+            }catch(\Exception $e){
+                $this->error('数据库连接失败，请检查数据库配置！');
+            }
+
+			$sql = "CREATE DATABASE IF NOT EXISTS `{$dbname}` DEFAULT CHARACTER SET utf8mb4";
+			if (!$db_instance->execute($sql)) {
+				return $this->error($db_instance->getError());
 			} else {
 				$this->redirect('install/index/sql');
 			}
@@ -146,20 +176,20 @@ class Index extends Controller {
 		$this->assign('status', $this->status);
 		echo $this->fetch();
 		if (session('update')) {
-			$db = \think\Db::connect();
+			$db_instance = \think\Db::connect();
 			//更新数据表
-			update_tables($db, config('prefix'));
+			update_tables($db_instance, config('prefix'));
 		} else {
 			//连接数据库
 			$dbconfig = session('db_config');
-			$db       = \think\Db::connect($dbconfig);
+			//$dbconfig['params']=['MYSQL_ATTR_USE_BUFFERED_QUERY'=>true];
+			$db_instance       = \think\Db::connect($dbconfig);
 			//创建数据表
-			create_tables($db, $dbconfig['prefix']);
+			create_tables($db_instance, $dbconfig['prefix']);
 			//更新网站信息
-			update_webconfig($db, $dbconfig['prefix'], session('web_config'));
+			update_webconfig($db_instance, $dbconfig['prefix'], session('web_config'));
 			//注册创始人帐号
-			register_administrator($db, $dbconfig['prefix'], session('admin_info'));
-
+			register_administrator($db_instance, $dbconfig['prefix'], session('admin_info'));
 			//创建配置文件
 			$conf = write_config($dbconfig);
 			session('config_file', $conf);
@@ -185,7 +215,6 @@ class Index extends Controller {
 		$this->status['config']   = 'success';
 		$this->status['sql']      = 'success';
 		$this->status['complete'] = 'primary';
-		$this->assign('status', $this->status);
 		$this->assign('status', $this->status);
 		return $this->fetch();
 	}

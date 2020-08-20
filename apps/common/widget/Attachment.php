@@ -1,8 +1,9 @@
 <?php
 // +----------------------------------------------------------------------
-// | Copyright (c) 2015 http://www.youdi365.com All rights reserved.
+// | Copyright (c) 2017-2019 https://www.eacoophp.com, All rights reserved.         
 // +----------------------------------------------------------------------
-// | Licensed ( http://www.apache.org/licenses/LICENSE-2.0 )
+// | [EacooPHP] 并不是自由软件,可免费使用,未经许可不能去掉EacooPHP相关版权。
+// | 禁止在EacooPHP整体或任何部分基础上发展任何派生、修改或第三方版本用于重新分发
 // +----------------------------------------------------------------------
 // | Author:  心云间、凝听 <981248356@qq.com>
 // +----------------------------------------------------------------------
@@ -38,8 +39,8 @@ class Attachment extends Base {
         //     $map['ext'] = ['in',$this->file_extensions];
         // }
         $map['path_type'] = ['in',$path_type];
-        $attachment_show_type = config('attachment_show_type');//附件选择器显示类型(0:所有，1:作者)
-        if (intval($attachment_show_type)==1) {
+        $widget_show_type = config('attachment_options.widget_show_type');//附件选择器显示类型(0:所有，1:作者)
+        if (intval($widget_show_type)==1) {
           $map['uid']=is_login();
         }
         $map['status']=1;
@@ -72,7 +73,7 @@ class Attachment extends Base {
      * 附件分页
      * @param  int $page_totalCount 数据总数
      * @param  int $number 每页数量
-     * @author 赵俊峰 <981248356@qq.com>
+     * @author 心云间、凝听 <981248356@qq.com>
      */
     protected function media_data_page($page_totalCount,$number){
         $p_num=$page_totalCount/$number;

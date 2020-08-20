@@ -1,20 +1,20 @@
 <?php
 // 模块管理          
 // +----------------------------------------------------------------------
-// | PHP version 5.4+                
+// | Copyright (c) 2016-2018 https://www.eacoophp.com, All rights reserved.         
 // +----------------------------------------------------------------------
-// | Copyright (c) 2017 http://www.eacoo123.com All rights reserved.
-// +----------------------------------------------------------------------
-// | Licensed ( http://www.apache.org/licenses/LICENSE-2.0 )
+// | [EacooPHP] 并不是自由软件,可免费使用,未经许可不能去掉EacooPHP相关版权。
+// | 禁止在EacooPHP整体或任何部分基础上发展任何派生、修改或第三方版本用于重新分发
 // +----------------------------------------------------------------------
 // | Author:  心云间、凝听 <981248356@qq.com>
 // +----------------------------------------------------------------------
 namespace app\admin\controller;
-use com\Sql;
+use eacoo\Sql;
 
 use app\admin\model\Modules as ModuleModel;
-use app\admin\builder\Builder;
+use app\admin\logic\Module as ModuleLogic;
 use app\admin\model\AuthRule;
+use app\admin\logic\Extension as ExtensionLogic;
 
 class Modules extends Admin {
 
@@ -34,132 +34,130 @@ class Modules extends Admin {
 	 * @date   2017-09-21
 	 * @author 心云间、凝听 <981248356@qq.com>
 	 */
-	public function index($from_type = 'local') {
-		$tab_list = [
-            'local'=>['title'=>'本地','href'=>url('index',['from_type'=>'local'])],
-            'oneline'=>['title'=>'模块市场','href'=>url('index',['from_type'=>'oneline'])],
-        ];
+	public function index($from_type = 'oneline') {
+        //$this->assign('page_config',['self'=>logic('admin/AppStore')->getAppsCenterTabList('module')]);
+        if (IS_AJAX) {
+            $paged = input('param.paged',1);
+             if ($from_type == 'local') {
+                $data_list = ModuleLogic::getAll();
+                $total = 0;
+            } elseif ($from_type == 'oneline') {
+                list($data_list,$total) = $this->getCloudAppstore($paged);
 
-        if ($from_type == 'local') {
-        	$data_list = $this->moduleModel->getAll();
+            }
+            $return = [
+                'code'=>1,
+                'msg'=>'成功获取应用',
+                'data'=>$data_list,
+                'page_content'=>logic('admin/AppStore')->getPaginationHtml($paged,$total)
+            ];
+            return json($return);
+        } else{
+            $tab_list = [
+                'local'=>['title'=>'本地模块','href'=>url('index',['from_type'=>'local'])],
+                'oneline'=>['title'=>'模块市场','href'=>url('index',['from_type'=>'oneline'])],
+            ];
+             if ($from_type == 'local') {
+                $meta_title = '本地模块';
 
-			Builder::run('List')
-					->setMetaTitle('模块列表')  // 设置页面标题
-					->setTabNav($tab_list,$from_type) 
-					//->addTopButton('resume')   // 添加启用按钮
-					//->addTopButton('forbid')   // 添加禁用按钮
-					//->addTopButton('sort')  // 添加排序按钮
-					->setSearch('请输入名称或标题', url('index'))
-					->keyListItem('name', '名称')
-					->keyListItem('title', '标题')
-					->keyListItem('description', '描述')
-					->keyListItem('author', '开发者')
-					->keyListItem('version', '版本')
-					//->keyListItem('create_time', '创建时间', 'time')
-					->keyListItem('status', '状态')
-					->keyListItem('right_button', '操作', 'btn')
-					->setListData($data_list)     // 数据列表
-					->fetch();
-        } elseif ($from_type == 'oneline') {
-        	$data_list = $this->getAppstoreModules();
+            } elseif ($from_type == 'oneline') {
+                $meta_title = '模块市场';
 
-			Builder::run('List')
-					->setMetaTitle('模块列表')  // 设置页面标题
-					->setTabNav($tab_list,$from_type) 
-					->keyListItem('name', '标识')
-                    ->keyListItem('title', '名称')
-                    ->keyListItem('description', '描述')
-                    ->keyListItem('author', '作者')
-                    ->keyListItem('downloaded', '活跃度')
-                    ->keyListItem('version', '版本号')
-                    ->keyListItem('publish_time', '最近更新')
-					->keyListItem('right_button', '操作', 'btn')
-					->setListData($data_list)     // 数据列表
-					->fetch();
+            }
+            $this->assign('tab_list',$tab_list);
+            $this->assign('from_type',$this->request->param('from_type','oneline'));
+            $this->assign('meta_title',$meta_title);
+            return $this->fetch('extension/modules');
         }
-		
+		 
 	}
 
 	/**
-	 * 模块依赖性检查
-	 * @param  [type] $dependences 模块
-	 * @return [type] [description]
-	 * @date   2017-09-15
-	 * @author 心云间、凝听 <981248356@qq.com>
-	 */
-	public function checkDependence($dependences) {
-		if (is_array($dependences)) {
-			$modules = $dependences['modules'];//依赖的模块
-			$plugins = $dependences['plugins'];//依赖的插件
-			//模块
-			if (!empty($modules) && is_array($modules)) {
-				foreach ($modules as $key => $val) {
-					if ($key=='admin' || $key=='user') {
-						continue;
-					}
-					$map = [
-						'name'=>$key,
-					];
-					$module_info = ModuleModel::where($map)->field('version,title')->find();
-					if (!$module_info) {
-						$this->error('该模块依赖'.$key.'模块');
-					}
-					//版本号检查
-					$module_version = explode('.', $module_info['version']);
-					$need_version   = explode('.', $val);
+     * 模块设置
+     * @return [type] [description]
+     * @date   2017-08-30
+     * @author 心云间、凝听 <981248356@qq.com>
+     */
+    public function config() {
+        if (IS_POST) {
+			$data   = $this->request->param();
+			$id     = $data['id'];
+			$config = $data['config'];
+            $res   = $this->moduleModel->save(['config'=>json_encode($config)],['id'=>$id]);
+            if ($res !== false) {
+                $this->success('保存成功');
+            } else {
+                $this->error('保存失败');
+            }
+        } else {
+            $id = input('param.id');
+            if (!$id) {
+                $map = ['name'=>input('param.name')];
+            } else{
+                $map = ['id'=>input('param.id')];
+            }
+            $app  = ModuleModel::get($map);
+            $app = $app ? $app->toArray() : $app;
+            if (!$app) {
+                $this->error('模块未安装');
+            }
 
-					if (($module_version[0] - $need_version[0]) >= 0) {
-						if (($module_version[1] - $need_version[1]) >= 0) {
-							if (($module_version[2] - $need_version[2]) >= 0) {
-								continue;
-							}
-						}
-					}
-					$this->error($module_info['title'].'模块版本不得低于v'.$val);
-				}
-			}
-			//插件
-			if (!empty($plugins) && is_array($plugins)) {
-				foreach ($modules as $key => $val) {
-					$map = [
-						'name'=>$key,
-					];
-					$plugins_info = db('plugins')->where($map)->field('version,title')->find();
-					if (!$plugins_info) {
-						$this->error('该模块依赖'.$key.'插件');
-					}
-					//版本号检查
-					$module_version = explode('.', $plugins_info['version']);
-					$need_version   = explode('.', $val);
+            $db_config = $app['config'];
+            $extensionObj = new ExtensionLogic;
+            $extensionObj->initInfo('module',$app['name']);
 
-					if (($module_version[0] - $need_version[0]) >= 0) {
-						if (($module_version[1] - $need_version[1]) >= 0) {
-							if (($module_version[2] - $need_version[2]) >= 0) {
-								continue;
-							}
-						}
-					}
-					$this->error($plugins_info['title'].'插件版本不得低于v'.$val);
-				}
-
-			}
-			
-			return true;
-		}
-	}
+            $options   = $extensionObj->getOptionsByFile();
+            $db_config = json_decode($db_config, true);
+            
+            $options = logic('common/Config')->buildFormByFiled($options,$db_config,true);
+    
+            if (!empty($app['custom_config'])) {
+                $this->assign('data', $app);
+                $this->assign('form_items', $options);
+                $this->assign('custom_config', $this->fetch($app['plugin_path'].$app['custom_config']));
+                return $this->fetch($app['plugin_path'].$app['custom_config']);
+            } else {
+                $content = builder('Form')
+                        ->setMetaTitle('设置-'.$app['title'])  //设置页面标题
+                        ->setPostUrl(url('config')) //设置表单提交地址
+                        ->addFormItem('id', 'hidden', 'ID', 'ID')
+                        ->setExtraItems($options) //直接设置表单数据
+                        ->setFormData($app)
+                        ->addButton('submit')->addButton('back')    // 设置表单按钮
+                        ->fetch();
+                return Iframe()
+                        ->setMetaTitle('设置-'.$app['title'])  //设置页面标题
+                        ->content($content);
+            }
+        }
+    }
 
 	/**
 	 * 安装模块之前
 	 */
-	public function install_before($name) {
-		Builder::run('Form')
-				->setMetaTitle('准备安装模块')  // 设置页面标题
-				->setPostUrl(url('install'))     // 设置表单提交地址
-				->addFormItem('name', 'hidden', 'name', 'name')
-				->addFormItem('clear', 'radio', '是否清除历史数据', '是否清除历史数据', [1 => '是', 0=> '否'])
-				->setFormData(['name' => $name])
-				->addButton('submit')->addButton('back')    // 设置表单按钮
-				->fetch();
+	public function installBefore($name) {
+		$this->assign('meta_title','准备安装模块');
+        if ($this->moduleModel->where('name',$name)->find()) {
+            $clear = 0;
+        } else{
+            $clear = 1;
+        }
+        $info = ['name'=>$name,'clear'=>$clear,'flag'=>'local'];
+        $fieldList = [
+                ['name'=>'name','type'=>'hidden','title'=>'名称'],
+                ['name'=>'flag','type'=>'hidden','title'=>'标记（标识来源于本地安装）'],
+                ['name'=>'clear','type'=>'radio','title'=>'清除数据：','description'=>'是否清除数据，默认否。如果卸载时未选择清理数据，请选择否','options'=>[1=> '是', 0=> '否']],
+            ];
+        foreach ($fieldList as $key => &$val) {
+            if ($val['name'] != 'self_html') {
+                $val['value'] = isset($info[$val['name']])? $info[$val['name']]:'';
+            }
+            
+        }
+        $this->assign('fieldList',$fieldList);
+        $this->assign('post_url',url('install'));
+        return $this->fetch('extension/install_before');
+
 	}
 
 	/**
@@ -171,93 +169,41 @@ class Modules extends Admin {
 	 * @author 心云间、凝听 <981248356@qq.com>
 	 */
 	public function install($name, $clear = 1) {
-		$this->moduleInstallPath = realpath(APP_PATH.$name).'/install';
-		// 获取当前模块信息
-		$info = ModuleModel::getInfoByFile($name);
-		if (empty($info) || !$info) {
-			$this->error('安装失败');
-		}
-		// 检查依赖
-		if (!empty($info['dependences'])) {
-			$result = $this->checkDependence($info['dependences']);
-			if (!$result) {
-				return false;
-			}
-		}
+		$extensionObj = new ExtensionLogic;
+        $extensionObj->initInfo('module',$name);
+        $result = $extensionObj->install($name,$clear);
+        if ($result['code']==1) {
+        	$this->success('安装成功', url('index',['from_type'=>'local']));
+        } else{
+        	$this->error($result['msg'], '');
+        }
 
-		// 安装数据库
-		$uninstall_sql_status = true;
-		// 清除旧数据
-		if ($clear) {
-			$sql_file = $this->moduleInstallPath.'/uninstall.sql';
-			if(is_file($sql_file)) $uninstall_sql_status = Sql::executeSqlByFile($sql_file, $info['database_prefix']);
-		}
-
-		// 安装新数据表
-		if (!$uninstall_sql_status) {
-			$this->error('安装失败');
-		}
-
-		$sql_file = $this->moduleInstallPath.'/install.sql';
-		if (is_file($sql_file)) {
-			$sql_status = Sql::executeSqlByFile($sql_file, $info['database_prefix']);
-			if (!$sql_status) {
-				$sql_file = $this->moduleInstallPath.'/uninstall.sql';
-				if(is_file($sql_file)) $sql_status = Sql::executeSqlByFile($sql_file, $info['database_prefix']);
-				$this->error('安装失败');
-			}
-		}
-
-		// 处理模块配置
-		$config = ModuleModel::getDefaultConfig($name);
-		$info['config'] = !empty($config) ? json_encode($config) : '';
-
-		// 写入数据库模块信息
-		$res = $this->moduleModel->allowField(true)->isUpdate(false)->data($info)->save();
-		if ($res) {
-			//后台菜单权限入库
-			$admin_menus = ModuleModel::getAdminMenusByFile($name);
-			if (!empty($admin_menus) && is_array($admin_menus)) {
-				$this->addAdminMenus($admin_menus,$name);
-			}
-			
-			// 安装成功后自动在前台新增导航(待完善)
-			$navigation = ModuleModel::getNavigationByFile($name);
-			if (!empty($navigation) && is_array($navigation)) {
-				
-			}
-
-			//静态资源文件
-            $static_path = realpath(APP_PATH.$name).'/static';
-            if (is_dir($static_path)) {
-                if(is_writable(ROOT_PATH.'public/static') && is_writable($static_path)){
-                    if (!rename($static_path,ROOT_PATH.'public/static/'.$name)) {
-                        trace('模块静态资源移动失败','error');
-                    } 
-                } else{
-                    PluginsModel::where('name',$name)->update(['status'=>0]);
-                    $this->error('安装失败，原因：模块静态资源目录不可写');
-                }
-            }
-
-			$this->success('安装成功', url('index'));
-		} else {
-			$this->error($this->moduleModel->getError());
-		}
 	}
 
 	/**
-	 * 卸载模块之前
-	 */
-	public function uninstall_before($id) {
-		Builder::run('Form')
-				->setMetaTitle('准备卸载模块')  // 设置页面标题
-				->setPostUrl(url('uninstall'))     // 设置表单提交地址
-				->addFormItem('id', 'hidden', 'ID', 'ID')
-				->addFormItem('clear', 'radio', '是否清除数据', '是否清除数据', array(1=> '是', 0=> '否（禁用）'))
-				->setFormData(array('id' => $id))
-				->addButton('submit')->addButton('back')    // 设置表单按钮
-				->fetch();
+     * 卸载模块之前
+     * @param  [type] $id [description]
+     * @return [type] [description]
+     * @date   2018-02-07
+     * @author 心云间、凝听 <981248356@qq.com>
+     */
+	public function uninstallBefore($id) {
+		$this->assign('meta_title','准备卸载模块');
+        $info=['id'=>$id];
+        $fieldList = [
+                ['name'=>'id','type'=>'hidden','title'=>'ID'],
+                ['name'=>'clear','type'=>'radio','title'=>'清除数据：','description'=>'是否清除数据，默认否','options'=>[1=> '是', 0=> '否（等于禁用）']],
+            ];
+        foreach ($fieldList as $key => &$val) {
+            if ($val['name']!='self_html') {
+                $val['value']=isset($info[$val['name']])? $info[$val['name']]:'';
+            }
+            
+        }
+        $this->assign('fieldList',$fieldList);
+        $post_url = url('uninstall');
+        $this->assign('post_url',$post_url);
+        return $this->fetch('extension/uninstall');
 	}
 
 	/**
@@ -277,41 +223,55 @@ class Modules extends Admin {
 		if ($clear) {
 			$result = ModuleModel::destroy($id);
 		} else{
-			$result = ModuleModel::where('id',$id)->update(['status'=>0]);
+			$result = ModuleModel::where('id',$id)->update(['status'=>-1]);
 		}
 		
 		if ($result) {
-			// 删除后台菜单
-		    $this->removeAdminMenus($name,$clear);
+			$extensionObj = new ExtensionLogic;
+            $extensionObj->initInfo('module',$name);
+            if ($clear) {
+                $setMenuNav = 'delete';
+            } else{
+                $setMenuNav = 'forbid';
+            }
+            // 重置菜单
+            $extensionObj->setAdminMenus($name,$setMenuNav);
+            logic('admin/Navigation')->setNavigationMenus($extensionObj->depend_type,$name,$setMenuNav);
 			if ($clear) {
+                $hooksLogic   = logic('Hooks');
+                $hooks_update = $hooksLogic->removeHooks('module',$name);
+                if ($hooks_update === false) {
+                    throw new \Exception("卸载模块所挂载的钩子数据失败", 0);
+                }
+                cache('hooks', null);
 		        //执行卸载sql
-				$sql_file   = realpath(APP_PATH.$name).'/install/uninstall.sql';
+				$sql_file   = APP_PATH.$name.'/install/uninstall.sql';
 				if (is_file($sql_file)) {
-					$info       = ModuleModel::getInfoByFile($name);
+					$info       = $extensionObj->getInfoByFile();
 					$sql_status = Sql::executeSqlByFile($sql_file, $info['database_prefix']);
 					if (!$sql_status) {
 						 $this->error('执行模块SQL卸载语句失败');
 					}
 				}
 				
-	            $_static_path = ROOT_PATH.'public/static/'.$name;
+	            $_static_path = PUBLIC_PATH.'static/'.$name;
 	            if (is_dir($_static_path)) {
-	                if(is_writable(ROOT_PATH.'public/static') && is_writable(realpath(APP_PATH.$name))){
-	                	$static_path = realpath(APP_PATH.$name).'/static';
-	                    if (!rename($_static_path,$static_path)) {
-	                        trace('插件静态资源移动失败：'.'public/static/'.$name.'->'.$static_path,'error');
-	                    } 
+	                if(is_writable(PUBLIC_PATH.'static') && is_writable(APP_PATH.$name)){
+	                    // if (!rmdirs($_static_path)) {
+	                    //     trace('模块静态资源删除失败：'.$_static_path,'error');
+	                    // } 
 	                } else{
-	                    PluginsModel::where('name',$name)->setField('status',0);
+	                    ModuleModel::where('name',$name)->setField('status',0);
 	                    $this->error('卸载失败，原因：模块静态资源目录不可写');
 	                }
 	            }
-	            $this->success('卸载成功',url('index'));
+	            $this->success('卸载成功',url('index',['from_type'=>'local']));
 			} else {
-				$this->success('卸载成功，相关数据未卸载！', url('index'));
+                cache('hooks', null);
+				$this->success('卸载成功，相关数据未卸载！',url('index',['from_type'=>'local']));
 			}
 		} else {
-			$this->error('卸载失败', url('index'));
+			$this->error('卸载失败', '');
 		}
 	}
 
@@ -322,155 +282,108 @@ class Modules extends Admin {
 	 * @date   2017-09-16
 	 * @author 心云间、凝听 <981248356@qq.com>
 	 */
-	public function updateInfo($id) {
-		$name = ModuleModel::where('id',$id)->value('name');
+	public function updateInfo($id=0) {
+		try {
+			if (!$id || $id<1) {
+				throw new \Exception("参数ID错误");
+			}
+			$module_db_info = ModuleModel::where('id',$id)->field('name,config')->find();
+			if (empty($module_db_info)) {
+				throw new \Exception("数据不存在");
+			}
+			$name = $module_db_info['name'];
 
-		// 获取当前模块信息
-		$info = ModuleModel::getInfoByFile($name);
+			$extensionObj = new ExtensionLogic;
+	        $extensionObj->initInfo('module',$name);
+			// 获取当前模块信息
+			$info = $extensionObj->getInfoByFile();
 
-		// 读取数据库已有配置
-		$db_moduel_config = ModuleModel::where('id',$id)->value('config');
-		$db_moduel_config = json_decode($db_moduel_config, true);
+			// 读取数据库已有配置
+			$db_moduel_config = json_decode($module_db_info['config'], true);
 
-		// 处理模块配置
-		$options = ModuleModel::getOptionsByFile($name);
-		if (!empty($options) && is_array($options)) {
-			$config= [];
-			foreach ($options as $key => $value) {
-				if ($value['type'] == 'group') {
-					foreach ($value['options'] as $gkey => $gvalue) {
-						foreach ($gvalue['options'] as $ikey => $ivalue) {
-							$config[$ikey] = $ivalue['value'];
+			// 处理模块配置
+			$options = $extensionObj->getOptionsByFile($name);
+			if (!empty($options) && is_array($options)) {
+				$config= [];
+				foreach ($options as $key => $value) {
+					if ($value['type'] == 'group') {
+						foreach ($value['options'] as $gkey => $gvalue) {
+							foreach ($gvalue['options'] as $ikey => $ivalue) {
+								$config[$ikey] = $ivalue['value'];
+							}
+						}
+					} else {
+						if (isset($db_moduel_config[$key])) {
+							$config[$key] = $db_moduel_config[$key];
+						} else {
+							$config[$key] = $options[$key]['value'];
 						}
 					}
-				} else {
-					if (isset($db_moduel_config[$key])) {
-						$config[$key] = $db_moduel_config[$key];
-					} else {
-						$config[$key] = $options[$key]['value'];
-					}
 				}
-			}
-			$info['config'] = json_encode($config);
-		} else {
-			$info['config'] = '';
-		}
-
-		$result = $this->moduleModel->allowField(true)->save($info,['id'=>$id]);
-		if ($result) {
-			// 删除后台菜单
-		    $this->removeAdminMenus($name,true);
-			//后台菜单入库
-			$admin_menus = ModuleModel::getAdminMenusByFile($name);
-			if (!empty($admin_menus) && is_array($admin_menus)) {
-				$this->addAdminMenus($admin_menus,$name);
+				$info['config'] = json_encode($config);
+			} else {
+				$info['config'] = '';
 			}
 
-			// 更新后自动在前台新增导航(待完善)
-			$navigation = ModuleModel::getNavigationByFile($name);
-			if (!empty($navigation) && is_array($navigation)) {
-				
-			} 
-			$this->success('更新成功', url('index'));
-		} else {
-			$this->error($this->moduleModel->getError());
-		}
+			$result = $this->moduleModel->allowField(true)->save($info,['id'=>$id]);
+			if ($result) {
+				if ($name!='user' && $name!='admin') {
+					// 删除后台该菜单
+				    $extensionObj->setAdminMenus($name,'delete');
+					//后台菜单入库
+					$admin_menus = $extensionObj->getAdminMenusByFile($name);
+					if (!empty($admin_menus) && is_array($admin_menus)) {
+						$extensionObj->addAdminMenus($admin_menus,$name);
+					}
 
+					// 更新后自动在前台新增导航(待完善)
+					$navigation = $extensionObj->getNavigationByFile($name);
+					if (!empty($navigation) && is_array($navigation)) {
+						
+					} 
+				}
+
+			} else {
+				throw new \Exception($this->moduleModel->getError());
+			}
+		} catch (\Exception $e) {
+			$this->error($e->getMessage());
+		}	
+		$this->success('更新成功', url('index',['from_type'=>'local']));
 	}
     
-	/**
-	 * 添加后台菜单
-	 * @param  array $data 菜单数据
-	 * @param  integer $pid 父级ID
-	 * @param  string $flag_name 模块名
-	 * @date   2017-09-15
-	 * @author 心云间、凝听 <981248356@qq.com>
-	 */
-    private function addAdminMenus($data = [], $flag_name = '', $pid = 0)
+    /**
+     * 刷新缓存
+     * @return [type] [description]
+     * @date   2017-10-30
+     * @author 心云间、凝听 <981248356@qq.com>
+     */
+    public function refresh()
     {
-    	if (!empty($data) && is_array($data) && $flag_name!='') {
-    		
-    		$authRuleModel = new AuthRule;
-			foreach ($data as $key => $menu) {
-				$pid = isset($menu['pid']) ? (int)$menu['pid'] : $pid;
-				
-				$menu['depend_type'] = 1;//1代表module
-				$menu['depend_flag'] = $flag_name;
-				$menu['pid']    = $pid;
-				$menu['sort']   = isset($menu['sort']) ? $menu['sort'] : 99;
-				$authRuleModel->allowField(true)->isUpdate(false)->data($menu)->save();
-				//添加子菜单
-				if (!empty($menu['sub_menu'])) {
-					$this->addAdminMenus($menu['sub_menu'], $flag_name, $authRuleModel->id);
-				}
-			}
-			cache('admin_sidebar_menus',null);//清空后台菜单缓存
-			return true;
-    	}
-    	return false;
+        ExtensionLogic::refresh('module');
+        $this->success('操作成功','');
     }
 
     /**
-     * 移除后台菜单
-     * @param  string $flag_name 模块名
-     * @param  boolean $delete 是否删除数据
+     * 删除
+     * @param  string $name [description]
      * @return [type] [description]
-     * @date   2017-09-18
+     * @date   2017-11-07
      * @author 心云间、凝听 <981248356@qq.com>
      */
-    private function removeAdminMenus($flag_name='' ,$delete=true)
+    public function delapp($name='')
     {
-    	if ($flag_name!='') {
-    		$map = [
-                'depend_type' => 1,
-                'depend_flag' => $flag_name
-            ];
-    		if ($delete) {
-    			$res = AuthRule::where($map)->delete();
-    		} else{
-    			$res = AuthRule::where($map)->update(['status'=>0]);
-    		}
-    		if (false === $res) {
-	            $this->error('菜单删除失败，请重新卸载');
-	        } else{
-	        	cache('admin_sidebar_menus',null);//清空后台菜单缓存
-	        	return true;
-	        }
-    	}
-    	return false;
+        if ($name!='') {
+            if (!is_writable(APP_PATH.$name)) {
+                $this->error('目录权限不足，请手动删除');
+            }
+            @rmdirs(APP_PATH.$name);
+            ExtensionLogic::refresh('module');
+            $this->success('删除模块成功',url('index',['from_type'=>'local']));
+        }
+        $this->error('删除模块失败');
     }
 
-    /**
-     * 更新后台菜单
-     * @param  array $data [description]
-     * @param  string $flag_name [description]
-     * @param  integer $pid [description]
-     * @return [type] [description]
-     * @date   2017-09-16
-     * @author 心云间、凝听 <981248356@qq.com>
-     */
-    private function updateAdminMenus($data = [], $flag_name = '', $pid = 0)
-    {
-   //  	if (!empty($data) && is_array($data) && $flag_name!='') {
-   //  		$authRuleModel = new AuthRule;
-			// foreach ($data as $key => $menu) {
-			// 	$menu['module'] = $flag_name;
-			// 	$menu['pid']    = $pid;
-			// 	$menu['sort']   = isset($menu['sort']) ? $menu['sort'] : 99;
-			// 	$authRuleModel->allowField(true)->isUpdate(false)->data($menu)->save();
-			// 	//添加子菜单
-			// 	if (isset($menu['sub_menu'])) {
-			// 		if (!empty($menu['sub_menu'])) {
-			// 			$this->updateAdminMenus($menu['sub_menu'], $flag_name, $authRuleModel->id);
-			// 		}
-	                
-	  //           }
-			// }
-			// cache('admin_sidebar_menus',null);//清空后台菜单缓存
-			// return true;
-   //  	}
-    	return false;
-    }
 
     /**
      * 排序
@@ -481,12 +394,12 @@ class Modules extends Admin {
      */
     public function sort($ids = null)
     {
-        $builder = Builder::run('Sort');
+        $builder = builder('Sort');
         if (IS_POST) {
             $builder->doSort('module', $ids);
         } else {
             $map['status'] = array('egt', 0);
-            $list = $this->moduleModel->selectByMap($map, 'sort asc', 'id,title,sort');
+            $list = $this->moduleModel->getList($map, 'sort asc', 'id,title,sort');
             foreach ($list as $key => $val) {
                 $list[$key]['title'] = $val['title'];
             }
@@ -501,20 +414,25 @@ class Modules extends Admin {
 	 * 设置一条或者多条数据的状态
 	 */
 	public function setStatus($model = CONTROLLER_NAME,$script=false){
-		$ids = input('param.ids/a');
-		cache('module_menus',null);//清空后台菜单缓存
+		$ids = $this->request->param('ids');
+		$status = $this->request->param('status');
 		if (is_array($ids)) {
 			foreach ($ids as $id) {
-				$is_system = model($model)->where('id',$id)->value('is_system');
-				if ($is_system) {
+				$info = model($model)->where('id',$id)->field('name,is_system')->find();
+				if ($info['is_system']) {
 					$this->error('系统模块不允许操作');
 				}
 			}
 		} else {
-			$is_system = model($model)->where('id',$id)->value('is_system');
-			if ($is_system) {
+			$info = model($model)->where('id',$ids)->field('name,is_system')->find();
+			if ($info['is_system']) {
 				$this->error('系统模块不允许操作');
 			}
+
+			$extensionObj = new ExtensionLogic;
+            $extensionObj->initInfo('module',$info['name']);
+            $extensionObj->setAdminMenus($info['name'],$status);
+			
 		}
 		parent::setStatus($model);
 	}
@@ -525,42 +443,53 @@ class Modules extends Admin {
      * @date   2017-09-21
      * @author 心云间、凝听 <981248356@qq.com>
      */
-    private function getAppstoreModules($paged = 1)
+    private function getCloudAppstore($paged = 1)
     {
+        $eacoo_appstore_modules_info = cache('eacoo_appstore_modules_info');
+        $total = $eacoo_appstore_modules_info['total'] ?? 30;
+
         $store_data = cache('eacoo_appstore_modules_'.$paged);
         if (empty($store_data) || !$store_data) {
-            $url        = 'http://www.eacoo123.com/server_appstore_modules';
+            $url        = config('eacoo_api_url').'/api/appstore/apps';
             $params = [
-                'paged'=>$paged
+                'paged'      =>$paged,
+                'type'       =>'module',
+                'eacoophp_v' =>EACOOPHP_V
             ];
-            $result     = curl_post($url,$params);
+            $result = curl_post($url,$params);
             $result = json_decode($result,true);
             $store_data = $result['data'];
+            
+            unset($params['paged']);
+            $total = count(json_decode(curl_post($url,$params),true)['data']);
             cache('eacoo_appstore_modules_'.$paged,$store_data,3600);
+            cache('eacoo_appstore_modules_info',['total'=>$total],3600);
         }
         if (!empty($store_data)) {
+        	$extensionObj = new ExtensionLogic();
+            $local_modules = $extensionObj->localApps('module');
             foreach ($store_data as $key => &$val) {
-                $local_data = $this->moduleModel->localModules();
-
-                $val['downloaded'] = '<i class="fa fa-star color-warning"></i> '.$val['downloaded'];
+                $val['from_type']    = 'oneline';
                 $val['publish_time'] = friendly_date($val['publish_time']);
-                $val['right_button'] = '<a class="label label-primary" href="javascript:void(0);" onclick="layer.alert(\'暂不支持在线安装\n请加QQ群：436491685\', {icon:6});">现在安装</a> ';
-                if (!empty($local_data)) {
-                    foreach ($local_data as $key => $row) {
+                $val['right_button'] = '<a class="btn btn-primary btn-sm app-online-install" data-name="'.$val['name'].'" data-type="module" href="javascript:void(0);" data-install-method="install">现在安装</a> ';
+                if (!empty($local_modules)) {
+                    foreach ($local_modules as $key => $row) {
                         if ($row['name']==$val['name']) {
                             if ($row['version']<$val['version']) {
-                                $val['right_button'] = '<a class="label label-success" href="javascript:void(0);" onclick="layer.alert(\'暂不支持在线安装\n请加QQ群：436491685\', {icon:6});">升级</a> ';
+                                $val['right_button'] = '<a class="btn btn-success btn-sm app-online-install"  data-name="'.$val['name'].'" data-type="module" href="javascript:void(0);" data-install-method="upgrade">升级</a> ';
+                            } elseif(isset($row['status']) && $row['status']==3){
+                                $val['right_button'] = '<a class="btn btn-default btn-sm" href="'.url('index',['from_type'=>'local']).'">已下载</a> ';
                             } else{
-                                $val['right_button'] = '<a class="label label-default" href="#">已安装</a> ';
+                                $val['right_button'] = '<a class="btn btn-default btn-sm" href="'.url('index',['from_type'=>'local']).'">已安装</a> ';
                             }
                             
                         }
                     }
                 }
 
-                $val['right_button'] .= '<a class="label label-info " href="http://www.eacoo123.com" target="_blank">更多详情</a> ';
+                //$val['right_button'] .= '<a class="btn btn-info btn-sm" href="https://www.eacoophp.com" target="_blank">更多详情</a> ';
             }
         }
-        return $store_data;
+        return [$store_data,$total];
     }
 }
